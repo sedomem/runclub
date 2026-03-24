@@ -1,0 +1,12 @@
+{
+  "name": "runclub",
+  "version": "1.0.0",
+  "description": "RunClub - Özel Koşu Grubu PWA",
+  "private": true,
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}

@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#FF6B00"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="RunClub"/>
+<meta name="description" content="RunClub - Ankara'nın en aktif koşu topluluğu"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>RunClub</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#f0f0f0;display:flex;justify-content:center;min-height:100vh;}
+#root{width:100%;max-width:430px;background:#fff;min-height:100vh;position:relative;overflow-x:hidden;}
+input,textarea,select{font-family:inherit;color:#111;-webkit-appearance:none;}
+button{font-family:inherit;cursor:pointer;}
+::-webkit-scrollbar{width:0;}
+.spin{animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;">
+    <div style="width:60px;height:60px;border-radius:16px;background:#FF6B00;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:900;">RC</div>
+    <div style="width:32px;height:32px;border:3px solid #FF6B00;border-top-color:transparent;border-radius:50%;" class="spin"></div>
+  </div>
+</div>
+
+<!-- 1) Firebase ÖNCE -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<!-- 2) Config & Init -->
+<script>
+const firebaseConfig = {
+  apiKey:            "AIzaSyB7SILozFPijLe3a15ytKeXnnL17yj-FGI",
+  authDomain:        "runclub-bc63c.firebaseapp.com",
+  projectId:         "runclub-bc63c",
+  storageBucket:     "runclub-bc63c.firebasestorage.app",
+  messagingSenderId: "442524891653",
+  appId:             "1:442524891653:web:7bdc9e4863d8cd0595fa6c",
+  measurementId:     "G-1MQFR32ZX0"
+};
+firebase.initializeApp(firebaseConfig);
+window._db   = firebase.firestore();
+window._auth = firebase.auth();
+window.DEMO  = false;
+</script>
+
+<!-- 3) React & Babel SONRA -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+const P="#FF6B00",BG="#fff",BG2="#F0F0F0",TXT="#111",TXT2="#555",BRD="#DDD";
+
+const SEED_BRAND={clubName:"RunClub",tagline:"Birlikte Koş, Birlikte Büyü",about:"RunClub, Ankara'nın en aktif koşu topluluğudur. 2022'den beri 200+ koşucu ile haftada 3 etkinlik düzenliyoruz.",contact:"info@runclub.com.tr",website:"https://runclub.com.tr",instagram:"@runclub.ankara",logoText:"RC",logoColor:"#FF6B00",logoImg:null,bgImg:null};
+const SEED_EVENTS=[
+  {id:"e1",title:"Sabah Parkur Koşusu",date:"2026-04-05T07:00",location:"Kuğulu Park, Ankara",distance:10,participants:[],isSponsored:true,sponsorId:"s1"},
+  {id:"e2",title:"Tempo Antrenmanı",date:"2026-04-08T18:30",location:"ODTÜ Kampüsü",distance:8,participants:[],isSponsored:false,sponsorId:null},
+  {id:"e3",title:"Hafta Sonu Uzun Koşu",date:"2026-04-12T08:00",location:"Eymir Gölü",distance:21,participants:[],isSponsored:true,sponsorId:"s2"},
+];
+const SEED_SPONSORS=[
+  {id:"s1",name:"SPX Running",logo:"SPX",color:"#FF6B00",msg:"Koşunu bir üst seviyeye taşı!",url:"https://spx.com",active:true},
+  {id:"s2",name:"NikeRun",logo:"NK",color:"#222",msg:"Just Do It.",url:"https://nike.com",active:true},
+];
+const SEED_ANN=[
+  {id:"a1",title:"🎉 Nisan Takvimi Açıklandı!",content:"Nisan ayı koşu programımız hazır. Toplam 8 etkinlik planlandı!",isSponsored:false,date:"2026-03-20"},
+  {id:"a2",title:"SPX Koşu Ayakkabısı İndirimi",content:"RunClub üyelerine özel %20 indirim!",isSponsored:true,sponsorId:"s1",date:"2026-03-18"},
+];
+
+const db   = window._db;
+const auth = window._auth;
+const DEMO = window.DEMO === true;
+
+function fmtDate(s){try{const d=new Date(s);return d.toLocaleDateString("tr-TR",{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return s;}}
+function countdown(s){const diff=new Date(s)-Date.now();if(diff<=0)return"Tamamlandı";const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000);if(h>48)return`${Math.floor(h/24)} gün`;if(h>0)return`${h}s ${m}dk`;return`${m} dk`;}
+function uid(){return"id_"+Math.random().toString(36).slice(2,9);}
+async function readFileAsDataURL(file){return new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(file);});}
+
+async function fsGet(col){if(!db)return[];const s=await db.collection(col).get();return s.docs.map(d=>({id:d.id,...d.data()}));}
+async function fsSet(col,id,data){if(!db)return;await db.collection(col).doc(id).set(data,{merge:true});}
+async function fsDel(col,id){if(!db)return;await db.collection(col).doc(id).delete();}
+async function fsAdd(col,data){if(!db)return{id:uid()};const r=await db.collection(col).add({...data,createdAt:firebase.firestore.FieldValue.serverTimestamp()});return{id:r.id};}
+
+const I={width:"100%",background:"#fff",border:`1.5px solid ${BRD}`,borderRadius:10,padding:"10px 12px",fontSize:14,color:TXT,outline:"none"};
+const TA={...I,resize:"none"};
+
+function Ava({name="?",size=36,img=null,color=P}){
+  const ini=(name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  if(img)return <img src={img} alt={name} style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>;
+  return <div style={{width:size,height:size,borderRadius:"50%",background:color+"33",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*.36,color,flexShrink:0}}>{ini}</div>;
+}
+function Spin(){return <div style={{width:24,height:24,border:`3px solid ${P}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>;}
+function Toast({msg,onDone}){useEffect(()=>{const t=setTimeout(onDone,3000);return()=>clearTimeout(t);},[]);return <div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",background:"#111",color:"#fff",borderRadius:20,padding:"10px 22px",fontSize:13,fontWeight:600,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,.3)"}}>{msg}</div>;}
+function Field({label,value,onChange,type="text",placeholder="",disabled=false}){return(<div style={{marginBottom:12}}><div style={{fontSize:12,color:TXT,marginBottom:4,fontWeight:600}}>{label}</div><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled} style={{...I,opacity:disabled?.6:1}}/></div>);}
+function Textarea({label,value,onChange,rows=3}){return(<div style={{marginBottom:12}}><div style={{fontSize:12,color:TXT,marginBottom:4,fontWeight:600}}>{label}</div><textarea value={value} onChange={e=>onChange(e.target.value)} rows={rows} style={TA}/></div>);}
+function Select({label,value,onChange,options}){return(<div style={{marginBottom:12}}><div style={{fontSize:12,color:TXT,marginBottom:4,fontWeight:600}}>{label}</div><select value={value} onChange={e=>onChange(e.target.value)} style={{...I}}>{options.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>);}
+function Toggle({on,onChange,label}){return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 0",borderBottom:`1px solid ${BRD}`}}><span style={{fontSize:14,color:TXT}}>{label}</span><div onClick={()=>onChange(!on)} style={{width:46,height:26,borderRadius:20,background:on?P:"#CCC",position:"relative",cursor:"pointer",transition:"background .2s",flexShrink:0}}><div style={{width:20,height:20,background:"#fff",borderRadius:"50%",position:"absolute",top:3,left:on?23:3,transition:"left .2s"}}/></div></div>);}
+function Btn({label,onClick,bg=P,fg="#fff",full=true,disabled=false,loading=false}){return(<button onClick={onClick} disabled={disabled||loading} style={{width:full?"100%":"auto",background:bg,color:fg,border:"none",borderRadius:12,padding:"13px 16px",fontSize:14,fontWeight:700,cursor:disabled||loading?"not-allowed":"pointer",marginBottom:full?8:0,opacity:disabled?.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{loading&&<Spin/>}{label}</button>);}
+function SpBadge({sponsorId,sponsors}){const s=sponsors.find(x=>x.id===sponsorId);if(!s)return null;return <span style={{background:s.color,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{s.logo} Sponsor</span>;}
+
+// ── AUTH ──────────────────────────────────────────────
+function AuthScreen({onAuth}){
+  const [tab,setTab]=useState("login");
+  const [name,setName]=useState(""),[ email,setEmail]=useState(""),[ pass,setPass]=useState(""),[ err,setErr]=useState(""),[ loading,setLoading]=useState(false);
+
+  const handleEmail=async()=>{
+    setErr("");setLoading(true);
+    try{
+      if(tab==="login"){
+        const c=await auth.signInWithEmailAndPassword(email,pass);
+        onAuth(c.user);
+      }else{
+        if(!name.trim()){setErr("Ad Soyad gerekli");setLoading(false);return;}
+        const c=await auth.createUserWithEmailAndPassword(email,pass);
+        await c.user.updateProfile({displayName:name});
+        await fsSet("users",c.user.uid,{name,email,role:"user",pace:"",strava:"",phone:"",notifEvents:true,notifReminder:true,notifSponsor:false,badges:["🏅 İlk Koşu"],createdAt:Date.now()});
+        onAuth(c.user);
+      }
+    }catch(e){
+      const m={"auth/user-not-found":"Kullanıcı bulunamadı","auth/wrong-password":"Şifre hatalı","auth/invalid-login-credentials":"E-posta veya şifre hatalı","auth/email-already-in-use":"Bu e-posta zaten kayıtlı","auth/weak-password":"Şifre çok zayıf (min 6 karakter)","auth/invalid-email":"Geçersiz e-posta formatı"};
+      setErr(m[e.code]||e.message);
+    }
+    setLoading(false);
+  };
+
+  const handleGoogle=async()=>{
+    setErr("");setLoading(true);
+    try{
+      const provider=new firebase.auth.GoogleAuthProvider();
+      const c=await auth.signInWithPopup(provider);
+      const u=c.user;
+      const doc=await db.collection("users").doc(u.uid).get();
+      if(!doc.exists){
+        await fsSet("users",u.uid,{name:u.displayName,email:u.email,photoURL:u.photoURL||"",role:"user",pace:"",strava:"",phone:"",notifEvents:true,notifReminder:true,notifSponsor:false,badges:["🏅 İlk Koşu"],createdAt:Date.now()});
+      }
+      onAuth(u);
+    }catch(e){setErr(e.message);}
+    setLoading(false);
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"24px 24px 48px"}}>
+      <div style={{width:72,height:72,borderRadius:18,background:P,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:900,color:"#fff",marginBottom:12}}>RC</div>
+      <div style={{fontSize:28,fontWeight:900,color:TXT,marginBottom:4}}>RunClub</div>
+      <div style={{fontSize:14,color:TXT2,marginBottom:32}}>Ankara'nın koşu topluluğu</div>
+      <div style={{width:"100%",maxWidth:360}}>
+        <div style={{display:"flex",gap:4,marginBottom:20,background:BG2,borderRadius:12,padding:4}}>
+          {[["login","Giriş Yap"],["register","Kayıt Ol"]].map(([k,l])=>(
+            <button key={k} onClick={()=>{setTab(k);setErr("");}} style={{flex:1,background:tab===k?P:"transparent",color:tab===k?"#fff":TXT2,border:"none",borderRadius:9,padding:"9px 0",fontSize:14,fontWeight:700,cursor:"pointer"}}>{l}</button>
+          ))}
+        </div>
+        {tab==="register"&&<Field label="Ad Soyad" value={name} onChange={setName}/>}
+        <Field label="E-posta" value={email} onChange={setEmail} type="email" placeholder="ornek@email.com"/>
+        <Field label="Şifre" value={pass} onChange={setPass} type="password" placeholder="En az 6 karakter"/>
+        {err&&<div style={{color:"#C62828",fontSize:12,marginBottom:8,fontWeight:600,padding:"8px 12px",background:"#FFEBEE",borderRadius:8}}>{err}</div>}
+        <Btn label={tab==="login"?"Giriş Yap":"Kayıt Ol"} onClick={handleEmail} loading={loading}/>
+        <div style={{display:"flex",alignItems:"center",gap:12,margin:"12px 0"}}>
+          <div style={{flex:1,height:1,background:BRD}}/><span style={{fontSize:12,color:TXT2}}>veya</span><div style={{flex:1,height:1,background:BRD}}/>
+        </div>
+        <button onClick={handleGoogle} disabled={loading} style={{width:"100%",background:"#fff",color:TXT,border:`1.5px solid ${BRD}`,borderRadius:12,padding:13,fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8}}>
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.5 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.3 13.1 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.4 37.1 46.5 31.3 46.5 24.5z"/><path fill="#FBBC05" d="M10.5 28.5c-1-3-1-6.2 0-9.2L2.7 13.3C-.5 19.5-.5 26.7 2.7 32.9l7.8-4.4z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.2 1.5-5 2.4-8.4 2.4-6.3 0-11.7-4.2-13.5-9.9l-7.8 4.4C6.6 42.6 14.6 48 24 48z"/></svg>
+          Google ile {tab==="login"?"Giriş Yap":"Kayıt Ol"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── SPLASH ────────────────────────────────────────────
+function Splash({brand,onDone}){
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:500,overflow:"hidden",maxWidth:430,left:"50%",transform:"translateX(-50%)"}}>
+      {brand.bgImg?<img src={brand.bgImg} alt="bg" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>
+        :<div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#111 0%,#2d1200 55%,#FF6B00 100%)"}}>
+          <svg viewBox="0 0 400 700" style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.15}}>
+            <ellipse cx="200" cy="530" rx="190" ry="230" fill="#FF6B00"/>
+            <circle cx="310" cy="130" r="95" fill="#FF9A3C"/>
+            <g fill="none" stroke="#fff" strokeLinecap="round">
+              <circle cx="90" cy="230" r="22" fill="#fff" stroke="none"/>
+              <path d="M72 256 Q90 320 135 342" strokeWidth="13"/>
+              <path d="M90 310 Q58 358 48 400" strokeWidth="12"/>
+              <path d="M90 310 Q118 360 128 400" strokeWidth="12"/>
+              <path d="M74 268 Q42 288 28 310" strokeWidth="10"/>
+              <path d="M112 268 Q148 278 162 262" strokeWidth="10"/>
+            </g>
+          </svg>
+        </div>
+      }
+      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.55)"}}/>
+      <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%",padding:"0 24px 52px",textAlign:"center"}}>
+        {brand.logoImg?<img src={brand.logoImg} alt="logo" style={{width:80,height:80,borderRadius:20,objectFit:"cover",marginBottom:14}}/>
+          :<div style={{width:80,height:80,borderRadius:20,background:brand.logoColor,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,fontWeight:900,color:"#fff",marginBottom:14}}>{brand.logoText}</div>}
+        <div style={{fontSize:36,fontWeight:900,color:"#fff",marginBottom:6}}>{brand.clubName}</div>
+        <div style={{fontSize:16,color:"rgba(255,255,255,.88)",marginBottom:4}}>{brand.tagline}</div>
+        {brand.instagram&&<div style={{fontSize:13,color:"rgba(255,255,255,.65)",marginBottom:18}}>{brand.instagram}</div>}
+        <div style={{background:"rgba(255,255,255,.12)",borderRadius:16,padding:"14px 18px",marginBottom:28,width:"100%",textAlign:"left"}}>
+          <div style={{fontSize:13,color:"rgba(255,255,255,.92)",lineHeight:1.7}}>{brand.about}</div>
+          <div style={{marginTop:10,display:"flex",gap:16,flexWrap:"wrap"}}>
+            {brand.website&&<a href={brand.website} target="_blank" rel="noreferrer" style={{fontSize:12,color:"#FFB347",textDecoration:"none"}}>🌐 {brand.website}</a>}
+            {brand.contact&&<span style={{fontSize:12,color:"rgba(255,255,255,.75)"}}>✉️ {brand.contact}</span>}
+          </div>
+        </div>
+        <button onClick={onDone} style={{width:"100%",background:P,color:"#fff",border:"none",borderRadius:14,padding:16,fontSize:16,fontWeight:800,cursor:"pointer"}}>Başla →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── SETTINGS ──────────────────────────────────────────
+function Settings({user,onBack,toast}){
+  const [u,setU]=useState({name:user.displayName||user.name||"",email:user.email||"",pace:user.pace||"",strava:user.strava||"",phone:user.phone||"",notifEvents:user.notifEvents!==false,notifReminder:user.notifReminder!==false,notifSponsor:!!user.notifSponsor});
+  const [op,setOp]=useState(""),[ np,setNp]=useState(""),[ np2,setNp2]=useState(""),[ pe,setPe]=useState("");
+  const [sec,setSec]=useState("profile"),[ saving,setSaving]=useState(false);
+  const isGoogle=auth.currentUser?.providerData?.[0]?.providerId==="google.com";
+
+  const save=async()=>{setSaving(true);await fsSet("users",auth.currentUser.uid,{name:u.name,pace:u.pace,strava:u.strava,phone:u.phone,notifEvents:u.notifEvents,notifReminder:u.notifReminder,notifSponsor:u.notifSponsor});toast("✓ Profil kaydedildi");setSaving(false);};
+  const chPw=async()=>{
+    if(np.length<6){setPe("En az 6 karakter");return;}
+    if(np!==np2){setPe("Şifreler eşleşmiyor");return;}
+    try{
+      const cred=firebase.auth.EmailAuthProvider.credential(user.email,op);
+      await auth.currentUser.reauthenticateWithCredential(cred);
+      await auth.currentUser.updatePassword(np);
+      setOp("");setNp("");setNp2("");setPe("");toast("✓ Şifre güncellendi");
+    }catch(e){setPe(e.code==="auth/wrong-password"?"Mevcut şifre hatalı":e.message);}
+  };
+
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+        <button onClick={onBack} style={{background:"none",border:"none",fontSize:26,cursor:"pointer",color:TXT}}>←</button>
+        <div style={{fontWeight:700,fontSize:18,color:TXT}}>Ayarlar</div>
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:18}}>
+        {[["profile","👤 Profil"],["security","🔒 Güvenlik"],["notif","🔔 Bildirimler"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setSec(k)} style={{flex:1,background:sec===k?P:BG2,color:sec===k?"#fff":TXT,border:"none",borderRadius:10,padding:"9px 4px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+      {sec==="profile"&&(<div>
+        <div style={{textAlign:"center",marginBottom:16}}><Ava name={u.name} size={68}/></div>
+        <Field label="Ad Soyad" value={u.name} onChange={v=>setU(p=>({...p,name:v}))}/>
+        <Field label="E-posta" value={u.email} onChange={()=>{}} disabled={true}/>
+        <Field label="Telefon" value={u.phone} onChange={v=>setU(p=>({...p,phone:v}))}/>
+        <Field label="Ortalama Tempo" value={u.pace} onChange={v=>setU(p=>({...p,pace:v}))} placeholder="5:30/km"/>
+        <Field label="Strava Linki" value={u.strava} onChange={v=>setU(p=>({...p,strava:v}))}/>
+        <Btn label="Kaydet" onClick={save} loading={saving}/>
+      </div>)}
+      {sec==="security"&&(<div>
+        <div style={{fontWeight:600,fontSize:15,color:TXT,marginBottom:12}}>Şifre Değiştir</div>
+        {isGoogle
+          ?<div style={{padding:"12px 16px",background:BG2,borderRadius:12,fontSize:13,color:TXT2}}>Google hesabıyla giriş yaptınız. Şifre değiştirmek için Google hesabınızı kullanın.</div>
+          :<div>
+            <Field label="Mevcut Şifre" value={op} onChange={setOp} type="password"/>
+            <Field label="Yeni Şifre" value={np} onChange={setNp} type="password"/>
+            <Field label="Yeni Şifre (Tekrar)" value={np2} onChange={setNp2} type="password"/>
+            {pe&&<div style={{color:"#C62828",fontSize:12,marginBottom:8,fontWeight:600,padding:"8px 12px",background:"#FFEBEE",borderRadius:8}}>{pe}</div>}
+            <Btn label="Şifreyi Güncelle" onClick={chPw}/>
+          </div>
+        }
+        <div style={{marginTop:20,padding:"12px 16px",background:BG2,borderRadius:12}}>
+          <div style={{fontSize:13,color:TXT,marginBottom:4,fontWeight:600}}>Hesap Bilgileri</div>
+          <div style={{fontSize:12,color:TXT2}}>E-posta: {user.email}</div>
+          <div style={{fontSize:12,color:TXT2}}>UID: {auth.currentUser?.uid?.slice(0,20)}...</div>
+        </div>
+      </div>)}
+      {sec==="notif"&&(<div>
+        <Toggle on={u.notifEvents} onChange={v=>setU(p=>({...p,notifEvents:v}))} label="Yeni etkinlik bildirimleri"/>
+        <Toggle on={u.notifReminder} onChange={v=>setU(p=>({...p,notifReminder:v}))} label="Hatırlatıcı (2 saat önce)"/>
+        <Toggle on={u.notifSponsor} onChange={v=>setU(p=>({...p,notifSponsor:v}))} label="Sponsor kampanya bildirimleri"/>
+        <div style={{marginTop:16}}><Btn label="Kaydet" onClick={save} loading={saving}/></div>
+      </div>)}
+    </div>
+  );
+}
+
+// ── PROFILE ───────────────────────────────────────────
+function Profile({user,userDoc,onSettings,onLogout}){
+  const name=userDoc?.name||user.displayName||"Kullanıcı";
+  const isAdmin=userDoc?.role==="admin";
+  return(
+    <div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 0 20px"}}>
+        {user.photoURL?<img src={user.photoURL} alt="av" style={{width:76,height:76,borderRadius:"50%",objectFit:"cover"}}/>:<Ava name={name} size={76}/>}
+        <div style={{fontWeight:700,fontSize:20,color:TXT,marginTop:10}}>{name}</div>
+        <div style={{color:TXT2,fontSize:14,marginTop:2}}>🏃 {userDoc?.pace||"—"}</div>
+        {userDoc?.strava&&<a href={"https://"+userDoc.strava} target="_blank" rel="noreferrer" style={{color:"#FC4C02",fontSize:13,marginTop:4,textDecoration:"none"}}>🔗 Strava</a>}
+        {isAdmin&&<span style={{background:P,color:"#fff",fontSize:12,padding:"4px 14px",borderRadius:20,marginTop:8,fontWeight:700}}>Admin</span>}
+        <div style={{fontSize:12,color:TXT2,marginTop:4}}>✉️ {user.email}</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:20}}>
+        {[["0","Koşu"],["0","km"],["—","Katılım"]].map(([v,l])=>(
+          <div key={l} style={{background:BG2,borderRadius:12,padding:"12px 8px",textAlign:"center"}}>
+            <div style={{fontWeight:800,fontSize:20,color:P}}>{v}</div>
+            <div style={{fontSize:12,color:TXT2}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Rozetler</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:22}}>
+        {(userDoc?.badges||["🏅 İlk Koşu"]).map(b=><span key={b} style={{background:BG2,borderRadius:20,padding:"6px 14px",fontSize:13,color:TXT}}>{b}</span>)}
+      </div>
+      <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Hesap</div>
+      {[["⚙️  Ayarlar",onSettings],["🚪  Çıkış Yap",onLogout]].map(([l,fn])=>(
+        <div key={l} onClick={fn} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",background:BG2,borderRadius:12,marginBottom:8,cursor:"pointer"}}>
+          <span style={{fontSize:14,color:TXT}}>{l}</span><span style={{color:TXT2,fontSize:18}}>›</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── EVENT CARD ────────────────────────────────────────
+function EventCard({event,joined,onRSVP,onClick,sponsors}){
+  const sp=sponsors.find(s=>s.id===event.sponsorId);
+  return(
+    <div style={{background:BG,border:`1px solid ${BRD}`,borderRadius:16,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 6px rgba(0,0,0,.07)"}}>
+      <div onClick={onClick} style={{cursor:"pointer"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+              {event.isSponsored&&<SpBadge sponsorId={event.sponsorId} sponsors={sponsors}/>}
+              <span style={{background:"#FFF3E8",color:P,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{countdown(event.date)}</span>
+            </div>
+            <div style={{fontWeight:700,fontSize:15,color:TXT}}>{event.title}</div>
+          </div>
+          <div style={{textAlign:"right",minWidth:48}}><div style={{fontSize:24,fontWeight:800,color:P}}>{event.distance}</div><div style={{fontSize:10,color:TXT2}}>km</div></div>
+        </div>
+        <div style={{fontSize:13,color:TXT2,marginBottom:2}}>📅 {fmtDate(event.date)}</div>
+        <div style={{fontSize:13,color:TXT2,marginBottom:event.isSponsored&&sp?8:0}}>📍 {event.location}</div>
+        {event.isSponsored&&sp&&<div style={{background:BG2,borderRadius:10,padding:"8px 12px",marginTop:6,marginBottom:4,border:`1px solid ${BRD}`}}><div style={{fontSize:12,color:TXT}}>Powered by <b style={{color:sp.color}}>{sp.name}</b> — {sp.msg}</div></div>}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          {[...Array(Math.min((event.participants||[]).length,4))].map((_,i)=>(
+            <div key={i} style={{width:24,height:24,borderRadius:"50%",background:`hsl(${i*60},55%,65%)`,border:"2px solid #fff",marginLeft:i>0?-8:0}}/>
+          ))}
+          <span style={{fontSize:12,color:TXT2,marginLeft:(event.participants||[]).length>0?8:0}}>{(event.participants||[]).length} katılımcı</span>
+        </div>
+        <button onClick={e=>{e.stopPropagation();onRSVP(event.id);}} style={{background:joined?BG2:P,color:joined?TXT2:"#fff",border:"none",borderRadius:20,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{joined?"✓ Katıldın":"Katıl"}</button>
+      </div>
+    </div>
+  );
+}
+
+function Home({events,rsvpd,onRSVP,onDetail,sponsors}){
+  const next=events.find(e=>new Date(e.date)>Date.now());
+  return(
+    <div>
+      {next&&(
+        <div style={{background:`linear-gradient(135deg,${P},#FF9A3C)`,borderRadius:18,padding:"18px 20px",marginBottom:18,color:"#fff"}}>
+          <div style={{fontSize:11,opacity:.85,marginBottom:4,fontWeight:700,letterSpacing:1}}>SONRAKI KOŞU</div>
+          <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>{next.title}</div>
+          <div style={{fontSize:13,opacity:.9,marginBottom:12}}>📍 {next.location}</div>
+          <div style={{display:"flex",justifyContent:"space-between"}}>
+            <div><div style={{fontSize:26,fontWeight:900}}>{countdown(next.date)}</div><div style={{fontSize:11,opacity:.8}}>kalan süre</div></div>
+            <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:800}}>{next.distance} km</div><div style={{fontSize:11,opacity:.8}}>{(next.participants||[]).length} kişi</div></div>
+          </div>
+        </div>
+      )}
+      <div style={{fontWeight:700,fontSize:16,color:TXT,marginBottom:12}}>Yaklaşan Koşular</div>
+      {events.length===0&&<div style={{textAlign:"center",color:TXT2,padding:"40px 0",fontSize:14}}>Henüz etkinlik yok</div>}
+      {events.map(ev=><EventCard key={ev.id} event={ev} joined={rsvpd.includes(ev.id)} onRSVP={onRSVP} onClick={()=>onDetail(ev)} sponsors={sponsors}/>)}
+    </div>
+  );
+}
+
+function EventDetail({event,onClose,joined,onRSVP,sponsors}){
+  const sp=sponsors.find(s=>s.id===event.sponsorId);
+  return(
+    <div style={{paddingBottom:20}}>
+      <button onClick={onClose} style={{background:"none",border:"none",fontSize:26,cursor:"pointer",color:TXT,marginBottom:8}}>←</button>
+      {event.isSponsored&&<div style={{marginBottom:10}}><SpBadge sponsorId={event.sponsorId} sponsors={sponsors}/></div>}
+      <div style={{fontWeight:800,fontSize:22,color:TXT,marginBottom:6}}>{event.title}</div>
+      <div style={{fontSize:13,color:TXT2,marginBottom:2}}>📅 {fmtDate(event.date)}</div>
+      <div style={{fontSize:13,color:TXT2,marginBottom:16}}>📍 {event.location}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+        {[["Mesafe",event.distance+"km"],["Katılımcı",(event.participants||[]).length+" kişi"],["Kalan",countdown(event.date)],["Oluşturan","Admin"]].map(([l,v])=>(
+          <div key={l} style={{background:BG2,borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:11,color:TXT2}}>{l}</div><div style={{fontWeight:700,fontSize:15,color:TXT}}>{v}</div></div>
+        ))}
+      </div>
+      <div style={{background:BG2,borderRadius:14,height:120,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",marginBottom:12,color:TXT2,fontSize:14,border:`1px solid ${BRD}`,gap:6}}>
+        <span style={{fontSize:28}}>🗺️</span>
+        <a href={`https://maps.google.com?q=${encodeURIComponent(event.location)}`} target="_blank" rel="noreferrer" style={{fontSize:12,color:P,textDecoration:"none",fontWeight:600}}>Google Maps'te Aç →</a>
+      </div>
+      {event.isSponsored&&sp&&(
+        <div style={{background:BG2,border:`1px solid ${BRD}`,borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+            <div style={{width:42,height:42,borderRadius:10,background:sp.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:14,flexShrink:0}}>{sp.logo}</div>
+            <div><div style={{fontWeight:700,color:TXT}}>{sp.name}</div><div style={{fontSize:12,color:TXT2}}>{sp.msg}</div></div>
+          </div>
+          <button onClick={()=>window.open(sp.url,"_blank")} style={{width:"100%",background:sp.color,color:"#fff",border:"none",borderRadius:10,padding:11,fontSize:13,fontWeight:700,cursor:"pointer"}}>Mağazayı Ziyaret Et →</button>
+        </div>
+      )}
+      <button onClick={()=>onRSVP(event.id)} style={{width:"100%",background:joined?BG2:P,color:joined?TXT:"#fff",border:"none",borderRadius:14,padding:14,fontSize:15,fontWeight:800,cursor:"pointer"}}>
+        {joined?"✓ Katılımın Onaylandı — İptal Et":"Koşuya Katıl"}
+      </button>
+    </div>
+  );
+}
+
+function CalendarScreen({events,sponsors}){
+  const [cur,setCur]=useState(()=>new Date());
+  const y=cur.getFullYear(),m=cur.getMonth();
+  const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();
+  const eDays=new Set(events.filter(e=>{const d=new Date(e.date);return d.getFullYear()===y&&d.getMonth()===m;}).map(e=>new Date(e.date).getDate()));
+  const cells=[...Array(fd===0?6:fd-1).fill(null),...Array.from({length:dim},(_,i)=>i+1)];
+  const MN=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+  const mEvents=events.filter(e=>{const d=new Date(e.date);return d.getFullYear()===y&&d.getMonth()===m;});
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <button onClick={()=>setCur(new Date(y,m-1,1))} style={{background:BG2,border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:18,color:TXT}}>‹</button>
+        <div style={{fontWeight:700,fontSize:16,color:TXT}}>{MN[m]} {y}</div>
+        <button onClick={()=>setCur(new Date(y,m+1,1))} style={{background:BG2,border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:18,color:TXT}}>›</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:8}}>
+        {["Pz","Pt","Sa","Ça","Pe","Cu","Ct"].map(d=><div key={d} style={{textAlign:"center",fontSize:11,color:TXT2,fontWeight:700,padding:"4px 0"}}>{d}</div>)}
+        {cells.map((d,i)=><div key={i} style={{textAlign:"center",padding:"8px 0",borderRadius:8,fontSize:13,background:d&&eDays.has(d)?P:"transparent",color:d&&eDays.has(d)?"#fff":d?TXT:"transparent",fontWeight:d&&eDays.has(d)?700:400}}>{d||""}</div>)}
+      </div>
+      <div style={{marginTop:20}}>
+        <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Bu Ayki Etkinlikler ({mEvents.length})</div>
+        {mEvents.length===0&&<div style={{textAlign:"center",color:TXT2,padding:"20px 0"}}>Bu ay etkinlik yok</div>}
+        {mEvents.map(ev=>(
+          <div key={ev.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:BG2,borderRadius:12,marginBottom:8}}>
+            <div style={{textAlign:"center",width:36,background:P+"22",borderRadius:8,padding:"4px 0",flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:800,color:P}}>{new Date(ev.date).getDate()}</div>
+              <div style={{fontSize:9,color:P}}>{MN[m].slice(0,3)}</div>
+            </div>
+            <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:TXT}}>{ev.title}</div><div style={{fontSize:11,color:TXT2}}>{ev.distance} km · {(ev.participants||[]).length} kişi</div></div>
+            {ev.isSponsored&&<SpBadge sponsorId={ev.sponsorId} sponsors={sponsors}/>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Announcements({announcements,sponsors}){
+  return(
+    <div>
+      <div style={{fontWeight:700,fontSize:18,color:TXT,marginBottom:14}}>Duyurular</div>
+      {announcements.length===0&&<div style={{textAlign:"center",color:TXT2,padding:"40px 0"}}>Henüz duyuru yok</div>}
+      {announcements.map(a=>{
+        const sp=a.isSponsored?sponsors.find(s=>s.id===a.sponsorId):null;
+        return(
+          <div key={a.id} style={{background:BG,border:`1.5px solid ${a.isSponsored&&sp?sp.color+"55":BRD}`,borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 5px rgba(0,0,0,.07)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{fontWeight:700,fontSize:14,color:TXT,flex:1}}>{a.title}</div>
+              {a.isSponsored&&sp&&<span style={{background:sp.color,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,whiteSpace:"nowrap",marginLeft:8}}>Sponsor</span>}
+            </div>
+            <div style={{fontSize:13,color:TXT2,marginBottom:8,lineHeight:1.6}}>{a.content}</div>
+            <div style={{fontSize:11,color:"#AAA"}}>{a.date}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── ADMIN ─────────────────────────────────────────────
+function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSponsors,users,setUsers,brand,setBrand,onSettings,toast}){
+  const [tab,setTab]=useState("analytics");
+  const TABS=[["analytics","📊"],["events","🏃"],["announce","📢"],["sponsors","💼"],["notif","🔔"],["brand","🎨"],["users","👥"]];
+  const blankE={title:"",date:"",location:"",distance:"",sponsorId:""};
+  const [eF,setEF]=useState(blankE);const [editE,setEditE]=useState(null);const [saving,setSaving]=useState(false);
+  const spOpts=[["","Sponsor Yok"],...sponsors.filter(s=>s.active).map(s=>[s.id,s.name])];
+
+  const saveE=async()=>{
+    if(!eF.title||!eF.date||!eF.location||!eF.distance){toast("❌ Tüm alanları doldurun");return;}
+    setSaving(true);
+    const data={title:eF.title,date:eF.date,location:eF.location,distance:Number(eF.distance),isSponsored:!!eF.sponsorId,sponsorId:eF.sponsorId||null,participants:[]};
+    if(editE){await fsSet("events",editE,data);setEvents(events.map(e=>e.id===editE?{...e,...data}:e));setEditE(null);}
+    else{const r=await fsAdd("events",data);setEvents([...events,{id:r.id,...data}]);}
+    setEF(blankE);toast("✓ Etkinlik kaydedildi");setSaving(false);
+  };
+  const delE=async id=>{await fsDel("events",id);setEvents(events.filter(e=>e.id!==id));toast("🗑️ Silindi");};
+  const startEditE=ev=>{setEditE(ev.id);setEF({title:ev.title,date:ev.date,location:ev.location,distance:String(ev.distance),sponsorId:ev.sponsorId||""});window.scrollTo(0,0);};
+
+  const blankA={title:"",content:"",sponsorId:""};
+  const [aF,setAF]=useState(blankA);
+  const saveA=async()=>{
+    if(!aF.title||!aF.content){toast("❌ Başlık ve içerik gerekli");return;}
+    const data={title:aF.title,content:aF.content,isSponsored:!!aF.sponsorId,sponsorId:aF.sponsorId||null,date:new Date().toLocaleDateString("tr-TR")};
+    const r=await fsAdd("announcements",data);
+    setAnnouncements([{id:r.id,...data},...announcements]);
+    setAF(blankA);toast("✓ Duyuru yayınlandı");
+  };
+  const delA=async id=>{await fsDel("announcements",id);setAnnouncements(announcements.filter(a=>a.id!==id));toast("🗑️ Silindi");};
+
+  const blankS={name:"",logo:"",color:"#FF6B00",msg:"",url:""};
+  const [sF,setSF]=useState(blankS);
+  const saveS=async()=>{
+    if(!sF.name||!sF.logo){toast("❌ Ad ve kod gerekli");return;}
+    const r=await fsAdd("sponsors",{...sF,active:true});
+    setSponsors([...sponsors,{id:r.id,...sF,active:true}]);
+    setSF(blankS);toast("✓ Sponsor eklendi");
+  };
+  const toggleS=async id=>{const s=sponsors.find(x=>x.id===id);await fsSet("sponsors",id,{active:!s.active});setSponsors(sponsors.map(x=>x.id===id?{...x,active:!x.active}:x));};
+  const delS=async id=>{await fsDel("sponsors",id);setSponsors(sponsors.filter(s=>s.id!==id));toast("🗑️ Silindi");};
+
+  const [nm,setNm]=useState("");
+  const sendN=()=>{if(!nm.trim()){toast("❌ Mesaj yazın");return;}toast(`📱 Gönderildi (${users.length} kullanıcı)`);setNm("");};
+
+  const logoRef=useRef();const bgRef=useRef();
+  const readImg=async(file,key)=>{const d=await readFileAsDataURL(file);setBrand(p=>({...p,[key]:d}));};
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontWeight:800,fontSize:18,color:TXT}}>Admin Panel</div>
+        <button onClick={onSettings} style={{background:BG2,border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:TXT}}>⚙️ Ayarlar</button>
+      </div>
+      <div style={{display:"flex",gap:4,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
+        {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flexShrink:0,background:tab===k?P:BG2,color:tab===k?"#fff":TXT,border:"none",borderRadius:10,padding:"8px 12px",fontSize:16,cursor:"pointer",fontWeight:700}}>{l}</button>)}
+      </div>
+
+      {tab==="analytics"&&(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+            {[[users.length,"👥","Üye"],[events.length,"🏃","Etkinlik"],[sponsors.filter(s=>s.active).length,"💼","Sponsor"],[announcements.length,"📢","Duyuru"]].map(([v,e,l])=>(
+              <div key={l} style={{background:BG2,borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
+                <div style={{fontSize:22}}>{e}</div><div style={{fontWeight:800,fontSize:22,color:P}}>{v}</div><div style={{fontSize:12,color:TXT2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:8}}>Kayıtlı Kullanıcılar</div>
+          {users.slice(0,5).map((u,i)=>(
+            <div key={u.id||i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:BG2,borderRadius:12,marginBottom:8}}>
+              <Ava name={u.name||"?"} size={32}/>
+              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:TXT}}>{u.name}</div><div style={{fontSize:11,color:TXT2}}>{u.email}</div></div>
+              <span style={{background:u.role==="admin"?P:"#888",color:"#fff",fontSize:9,padding:"2px 7px",borderRadius:20}}>{u.role==="admin"?"Admin":"Üye"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==="events"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>{editE?"✏️ Düzenle":"➕ Yeni Etkinlik"}</div>
+          <Field label="Başlık" value={eF.title} onChange={v=>setEF(p=>({...p,title:v}))}/>
+          <Field label="Tarih & Saat" value={eF.date} onChange={v=>setEF(p=>({...p,date:v}))} type="datetime-local"/>
+          <Field label="Konum" value={eF.location} onChange={v=>setEF(p=>({...p,location:v}))}/>
+          <Field label="Mesafe (km)" value={eF.distance} onChange={v=>setEF(p=>({...p,distance:v}))} type="number"/>
+          <Select label="Sponsor" value={eF.sponsorId} onChange={v=>setEF(p=>({...p,sponsorId:v}))} options={spOpts}/>
+          <div style={{display:"flex",gap:8,marginBottom:20}}>
+            <Btn label={editE?"Güncelle":"Oluştur"} onClick={saveE} loading={saving}/>
+            {editE&&<button onClick={()=>{setEditE(null);setEF(blankE);}} style={{flex:1,background:BG2,border:"none",borderRadius:12,padding:13,fontSize:14,cursor:"pointer",color:TXT,fontWeight:700}}>İptal</button>}
+          </div>
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Etkinlikler ({events.length})</div>
+          {events.map(ev=>(
+            <div key={ev.id} style={{background:BG2,borderRadius:12,padding:"10px 14px",marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:TXT}}>{ev.title}</div><div style={{fontSize:11,color:TXT2}}>{fmtDate(ev.date)} · {ev.distance}km</div></div>
+                <div style={{display:"flex",gap:4,marginLeft:8}}>
+                  <button onClick={()=>startEditE(ev)} style={{background:"#FFF3E8",color:P,border:"none",borderRadius:8,padding:"5px 10px",fontSize:12,cursor:"pointer",fontWeight:600}}>✏️</button>
+                  <button onClick={()=>delE(ev.id)} style={{background:"#FFEBEE",color:"#C62828",border:"none",borderRadius:8,padding:"5px 10px",fontSize:12,cursor:"pointer",fontWeight:600}}>🗑️</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==="announce"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Duyuru</div>
+          <Field label="Başlık" value={aF.title} onChange={v=>setAF(p=>({...p,title:v}))}/>
+          <Textarea label="İçerik" value={aF.content} onChange={v=>setAF(p=>({...p,content:v}))}/>
+          <Select label="Sponsor (opsiyonel)" value={aF.sponsorId} onChange={v=>setAF(p=>({...p,sponsorId:v}))} options={spOpts}/>
+          <div style={{marginBottom:20}}><Btn label="Duyuruyu Yayınla" onClick={saveA}/></div>
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Duyurular ({announcements.length})</div>
+          {announcements.map(a=>(
+            <div key={a.id} style={{background:BG2,borderRadius:12,padding:"10px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:TXT}}>{a.title}</div><div style={{fontSize:11,color:TXT2}}>{a.date}</div></div>
+              <button onClick={()=>delA(a.id)} style={{background:"#FFEBEE",color:"#C62828",border:"none",borderRadius:8,padding:"5px 10px",fontSize:12,cursor:"pointer",marginLeft:8}}>🗑️</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==="sponsors"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Sponsor</div>
+          <Field label="Sponsor Adı" value={sF.name} onChange={v=>setSF(p=>({...p,name:v}))}/>
+          <Field label="Kısa Kod (2-3 harf)" value={sF.logo} onChange={v=>setSF(p=>({...p,logo:v.slice(0,3).toUpperCase()}))}/>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,color:TXT,marginBottom:4,fontWeight:600}}>Marka Rengi</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <input type="color" value={sF.color} onChange={e=>setSF(p=>({...p,color:e.target.value}))} style={{width:44,height:36,borderRadius:8,border:`1px solid ${BRD}`,cursor:"pointer",padding:2}}/>
+              <div style={{width:36,height:36,borderRadius:8,background:sF.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:13}}>{sF.logo||"??"}</div>
+            </div>
+          </div>
+          <Field label="Slogan" value={sF.msg} onChange={v=>setSF(p=>({...p,msg:v}))}/>
+          <Field label="Web Sitesi" value={sF.url} onChange={v=>setSF(p=>({...p,url:v}))}/>
+          <div style={{marginBottom:20}}><Btn label="Sponsor Ekle" onClick={saveS}/></div>
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Sponsorlar ({sponsors.length})</div>
+          {sponsors.map(s=>(
+            <div key={s.id} style={{background:BG2,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:40,height:40,background:s.color,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:13,flexShrink:0}}>{s.logo}</div>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:TXT}}>{s.name}</div><div style={{fontSize:11,color:TXT2}}>{s.url}</div></div>
+                <button onClick={()=>toggleS(s.id)} style={{background:s.active?"#E8F5E9":"#FFEBEE",color:s.active?"#2E7D32":"#C62828",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>{s.active?"✓ Aktif":"✗ Pasif"}</button>
+                <button onClick={()=>delS(s.id)} style={{background:"#FFEBEE",color:"#C62828",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==="notif"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>📱 Push Bildirim</div>
+          <Textarea label="Mesaj" value={nm} onChange={setNm} rows={3}/>
+          <Btn label={`Tüm Kullanıcılara Gönder (${users.length} kişi)`} onClick={sendN}/>
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginTop:20,marginBottom:10}}>Sponsor Kampanyaları</div>
+          {sponsors.filter(s=>s.active).map(s=>(
+            <button key={s.id} onClick={()=>toast(`📢 ${s.name} kampanyası gönderildi!`)} style={{width:"100%",background:s.color+"18",border:`1.5px solid ${s.color}55`,borderRadius:12,padding:"13px 16px",marginBottom:8,fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",color:TXT,display:"block"}}>
+              📢 {s.name} kampanyası gönder
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab==="brand"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>🎨 Karşılama Ekranı</div>
+          <Field label="Kulüp Adı" value={brand.clubName} onChange={v=>setBrand(p=>({...p,clubName:v}))}/>
+          <Field label="Slogan" value={brand.tagline} onChange={v=>setBrand(p=>({...p,tagline:v}))}/>
+          <Textarea label="Hakkımızda" value={brand.about} onChange={v=>setBrand(p=>({...p,about:v}))}/>
+          <Field label="İletişim E-posta" value={brand.contact} onChange={v=>setBrand(p=>({...p,contact:v}))} type="email"/>
+          <Field label="Web Sitesi" value={brand.website} onChange={v=>setBrand(p=>({...p,website:v}))}/>
+          <Field label="Instagram" value={brand.instagram} onChange={v=>setBrand(p=>({...p,instagram:v}))}/>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,color:TXT,marginBottom:4,fontWeight:600}}>Logo Kısa Adı & Rengi</div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input value={brand.logoText} onChange={e=>setBrand(p=>({...p,logoText:e.target.value.slice(0,3).toUpperCase()}))} style={{...I,flex:1}}/>
+              <input type="color" value={brand.logoColor} onChange={e=>setBrand(p=>({...p,logoColor:e.target.value}))} style={{width:44,height:42,borderRadius:8,border:`1px solid ${BRD}`,cursor:"pointer",padding:2}}/>
+              <div style={{width:42,height:42,borderRadius:10,background:brand.logoColor,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:14}}>{brand.logoText}</div>
+            </div>
+          </div>
+          <input ref={logoRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{if(e.target.files[0])await readImg(e.target.files[0],"logoImg");}}/>
+          <button onClick={()=>logoRef.current.click()} style={{width:"100%",background:BG2,border:`2px dashed ${BRD}`,borderRadius:12,padding:13,fontSize:13,cursor:"pointer",marginBottom:8,color:TXT,fontWeight:600}}>
+            {brand.logoImg?"✓ Logo Yüklendi — Değiştir":"📷 Galeriden Logo Yükle"}
+          </button>
+          {brand.logoImg&&<img src={brand.logoImg} alt="logo" style={{width:64,height:64,borderRadius:12,objectFit:"cover",marginBottom:8}}/>}
+          <input ref={bgRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{if(e.target.files[0])await readImg(e.target.files[0],"bgImg");}}/>
+          <button onClick={()=>bgRef.current.click()} style={{width:"100%",background:BG2,border:`2px dashed ${BRD}`,borderRadius:12,padding:13,fontSize:13,cursor:"pointer",marginBottom:8,color:TXT,fontWeight:600}}>
+            {brand.bgImg?"✓ Arka Plan Yüklendi — Değiştir":"🖼️ Galeriden Arka Plan Yükle"}
+          </button>
+          {brand.bgImg&&<img src={brand.bgImg} alt="bg" style={{width:"100%",height:80,borderRadius:12,objectFit:"cover",marginBottom:8}}/>}
+          <Btn label="✓ Kaydet" onClick={async()=>{await fsSet("config","brand",brand);toast("✓ Marka ayarları kaydedildi");}}/>
+        </div>
+      )}
+
+      {tab==="users"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>Kullanıcılar ({users.length})</div>
+          {users.map((u,i)=>(
+            <div key={u.id||i} style={{background:BG2,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                {u.photoURL?<img src={u.photoURL} alt="" style={{width:40,height:40,borderRadius:"50%",objectFit:"cover"}}/>:<Ava name={u.name||"?"} size={40}/>}
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:14,color:TXT}}>{u.name}</div><div style={{fontSize:11,color:TXT2}}>{u.email}</div></div>
+                <span style={{background:u.role==="admin"?P:"#888",color:"#fff",fontSize:10,padding:"3px 8px",borderRadius:20,fontWeight:700}}>{u.role==="admin"?"Admin":"Üye"}</span>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={async()=>{const nr=u.role==="admin"?"user":"admin";await fsSet("users",u.id,{role:nr});setUsers(users.map(x=>x.id===u.id?{...x,role:nr}:x));toast("✓ Rol güncellendi");}}
+                  style={{background:"#FFF3E8",color:P,border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                  {u.role==="admin"?"→ Üye Yap":"→ Admin Yap"}
+                </button>
+                <button onClick={async()=>{if(u.role==="admin"){toast("❌ Admin silinemez");return;}await fsDel("users",u.id);setUsers(users.filter(x=>x.id!==u.id));toast("🗑️ Silindi");}}
+                  style={{background:"#FFEBEE",color:"#C62828",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontWeight:600,opacity:u.role==="admin"?0.4:1}}>
+                  Sil
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ROOT ──────────────────────────────────────────────
+function App(){
+  const [phase,setPhase]=useState("loading");
+  const [fireUser,setFireUser]=useState(null);
+  const [userDoc,setUserDoc]=useState(null);
+  const [tab,setTab]=useState("home");
+  const [sub,setSub]=useState(null);
+  const [detail,setDetail]=useState(null);
+  const [toastMsg,setToastMsg]=useState("");
+  const [brand,setBrand]=useState(SEED_BRAND);
+  const [events,setEvents]=useState(SEED_EVENTS);
+  const [anns,setAnns]=useState(SEED_ANN);
+  const [sponsors,setSponsors]=useState(SEED_SPONSORS);
+  const [users,setUsers]=useState([]);
+
+  const toast=msg=>setToastMsg(msg);
+
+  useEffect(()=>{
+    const unsub=auth.onAuthStateChanged(async u=>{
+      if(u){
+        setFireUser(u);
+        try{
+          const [evSnap,annSnap,spSnap,usSnap,brandSnap]=await Promise.all([
+            db.collection("events").get(),
+            db.collection("announcements").get(),
+            db.collection("sponsors").get(),
+            db.collection("users").get(),
+            db.collection("config").doc("brand").get(),
+          ]);
+          if(evSnap.docs.length>0) setEvents(evSnap.docs.map(d=>({id:d.id,...d.data()})));
+          if(annSnap.docs.length>0) setAnns(annSnap.docs.map(d=>({id:d.id,...d.data()})));
+          if(spSnap.docs.length>0) setSponsors(spSnap.docs.map(d=>({id:d.id,...d.data()})));
+          if(usSnap.docs.length>0) setUsers(usSnap.docs.map(d=>({id:d.id,...d.data()})));
+          if(brandSnap.exists) setBrand(brandSnap.data());
+          const myDoc=usSnap.docs.find(d=>d.id===u.uid);
+          setUserDoc(myDoc?myDoc.data():null);
+        }catch(e){console.error(e);}
+        setPhase("app");
+      }else{
+        setFireUser(null);setPhase("splash");
+      }
+    });
+    return unsub;
+  },[]);
+
+  const handleAuth=u=>{setFireUser(u);};
+  const handleLogout=async()=>{await auth.signOut();setFireUser(null);setPhase("splash");};
+
+  const handleRSVP=async id=>{
+    if(!fireUser){toast("Önce giriş yapın");return;}
+    const ev=events.find(e=>e.id===id);if(!ev)return;
+    const joined=(ev.participants||[]).includes(fireUser.uid);
+    const newP=joined?(ev.participants||[]).filter(p=>p!==fireUser.uid):[...(ev.participants||[]),fireUser.uid];
+    await fsSet("events",id,{participants:newP});
+    setEvents(events.map(e=>e.id===id?{...e,participants:newP}:e));
+    if(detail&&detail.id===id) setDetail(prev=>({...prev,participants:newP}));
+    toast(joined?"Katılım iptal edildi":"✓ Koşuya katıldın!");
+  };
+
+  const isAdmin=userDoc?.role==="admin";
+  const rsvpd=fireUser?events.filter(e=>(e.participants||[]).includes(fireUser.uid)).map(e=>e.id):[];
+
+  const TABS=[
+    {id:"home",icon:"🏃",label:"Koşular"},
+    {id:"calendar",icon:"📅",label:"Takvim"},
+    {id:"announcements",icon:"📢",label:"Duyurular"},
+    {id:"profile",icon:"👤",label:"Profil"},
+    ...(isAdmin?[{id:"admin",icon:"⚙️",label:"Admin"}]:[]),
+  ];
+
+  const changeTab=t=>{setTab(t);setSub(null);setDetail(null);};
+
+  if(phase==="loading") return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16}}>
+      <div style={{width:60,height:60,borderRadius:16,background:P,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:24,fontWeight:900}}>RC</div>
+      <Spin/>
+    </div>
+  );
+  if(phase==="splash") return <Splash brand={brand} onDone={()=>setPhase("auth")}/>;
+  if(phase==="auth") return <AuthScreen onAuth={u=>{handleAuth(u);setPhase("app");}}/>;
+
+  const renderContent=()=>{
+    if(sub==="settings") return <Settings user={{...userDoc,...fireUser}} onBack={()=>setSub(null)} toast={toast}/>;
+    switch(tab){
+      case"home": return detail
+        ?<EventDetail event={events.find(e=>e.id===detail.id)||detail} onClose={()=>setDetail(null)} joined={rsvpd.includes(detail.id)} onRSVP={handleRSVP} sponsors={sponsors}/>
+        :<Home events={events} rsvpd={rsvpd} onRSVP={handleRSVP} onDetail={setDetail} sponsors={sponsors}/>;
+      case"calendar": return <CalendarScreen events={events} sponsors={sponsors}/>;
+      case"announcements": return <Announcements announcements={anns} sponsors={sponsors}/>;
+      case"profile": return <Profile user={fireUser||{}} userDoc={userDoc} onSettings={()=>setSub("settings")} onLogout={handleLogout}/>;
+      case"admin": return <Admin events={events} setEvents={setEvents} announcements={anns} setAnnouncements={setAnns} sponsors={sponsors} setSponsors={setSponsors} users={users} setUsers={setUsers} brand={brand} setBrand={setBrand} onSettings={()=>setSub("settings")} toast={toast}/>;
+      default: return null;
+    }
+  };
+
+  const name=(userDoc?.name||fireUser?.displayName||"Kullanıcı").split(" ")[0];
+  return(
+    <div style={{width:"100%",minHeight:"100vh",background:BG,position:"relative"}}>
+      <div style={{padding:"13px 16px 8px",borderBottom:`1px solid ${BRD}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:BG,position:"sticky",top:0,zIndex:50}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {brand.logoImg?<img src={brand.logoImg} alt="logo" style={{width:28,height:28,borderRadius:7,objectFit:"cover"}}/>
+            :<div style={{width:28,height:28,borderRadius:7,background:brand.logoColor,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:900}}>{brand.logoText}</div>}
+          <span style={{fontWeight:800,fontSize:17,color:TXT}}>{brand.clubName}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:12,color:TXT2}}>Merhaba, {name}!</span>
+          {fireUser?.photoURL?<img src={fireUser.photoURL} alt="" style={{width:28,height:28,borderRadius:"50%",objectFit:"cover"}}/>:<Ava name={name} size={28}/>}
+        </div>
+      </div>
+      <div style={{padding:"16px 16px 88px",minHeight:"calc(100vh - 56px)"}}>
+        {renderContent()}
+      </div>
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:BG,borderTop:`1px solid ${BRD}`,display:"flex",zIndex:100,boxShadow:"0 -2px 12px rgba(0,0,0,.08)"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>changeTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 0 10px",background:"none",border:"none",cursor:"pointer"}}>
+            <span style={{fontSize:20}}>{t.icon}</span>
+            <span style={{fontSize:9,fontWeight:700,color:tab===t.id?P:TXT2,marginTop:2}}>{t.label}</span>
+            {tab===t.id&&<div style={{width:4,height:4,borderRadius:"50%",background:P,marginTop:2}}/>}
+          </button>
+        ))}
+      </div>
+      {toastMsg&&<Toast msg={toastMsg} onDone={()=>setToastMsg("")}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  });
+}
+const isIOS=/iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+const isStandalone=window.matchMedia("(display-mode:standalone)").matches;
+if(isIOS&&!isStandalone&&!localStorage.getItem("iosHint")){
+  setTimeout(()=>{
+    const b=document.createElement("div");
+    b.innerHTML=`<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:14px;font-size:12px;font-family:sans-serif;z-index:9998;max-width:300px;text-align:center;">📱 Ana ekrana eklemek için <b>Paylaş</b> → <b>Ana Ekrana Ekle</b><button onclick="this.parentNode.parentNode.remove();localStorage.setItem('iosHint','1')" style="background:none;border:none;color:#FF6B00;margin-left:8px;cursor:pointer;font-size:14px;">✕</button></div>`;
+    document.body.appendChild(b);
+  },3000);
+}
+</script>
+</body>
+</html>
