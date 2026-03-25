@@ -468,7 +468,7 @@ function Announcements({announcements,sponsors}){
 }
 
 // ── ADMIN ─────────────────────────────────────────────
-function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSponsors,users,setUsers,brand,setBrand,onSettings,toast}){
+function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSponsors,users,setUsers,brand,setBrand,onSettings,onLogout,toast}){
   const [tab,setTab]=useState("analytics");
   const TABS=[["analytics","📊"],["events","🏃"],["announce","📢"],["sponsors","💼"],["notif","🔔"],["brand","🎨"],["users","👥"]];
   const blankE={title:"",date:"",location:"",distance:"",sponsorId:""};
@@ -782,7 +782,7 @@ function App(){
       case"calendar": return <CalendarScreen events={events} sponsors={sponsors}/>;
       case"announcements": return <Announcements announcements={anns} sponsors={sponsors}/>;
       case"profile": return <Profile user={fireUser||{}} userDoc={userDoc} onSettings={()=>setSub("settings")} onLogout={handleLogout}/>;
-      case"admin": return <Admin events={events} setEvents={setEvents} announcements={anns} setAnnouncements={setAnns} sponsors={sponsors} setSponsors={setSponsors} users={users} setUsers={setUsers} brand={brand} setBrand={setBrand} onSettings={()=>setSub("settings")} toast={toast}/>;
+      case"admin": return <Admin events={events} setEvents={setEvents} announcements={anns} setAnnouncements={setAnns} sponsors={sponsors} setSponsors={setSponsors} users={users} setUsers={setUsers} brand={brand} setBrand={setBrand} onSettings={()=>setSub("settings")} onLogout={handleLogout} toast={toast}/>;
       default: return null;
     }
   };
