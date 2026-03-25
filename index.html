@@ -31,12 +31,10 @@ button{font-family:inherit;cursor:pointer;}
   </div>
 </div>
 
-<!-- 1) Firebase ÖNCE -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-<!-- 2) Config & Init -->
 <script>
 const firebaseConfig = {
   apiKey:            "AIzaSyB7SILozFPijLe3a15ytKeXnnL17yj-FGI",
@@ -53,7 +51,6 @@ window._auth = firebase.auth();
 window.DEMO  = false;
 </script>
 
-<!-- 3) React & Babel SONRA -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -77,16 +74,13 @@ const SEED_ANN=[
   {id:"a2",title:"SPX Koşu Ayakkabısı İndirimi",content:"Onetrail üyelerine özel %20 indirim!",isSponsored:true,sponsorId:"s1",date:"2026-03-18"},
 ];
 
-const db   = window._db;
-const auth = window._auth;
-const DEMO = window.DEMO === true;
+const db=window._db;
+const auth=window._auth;
 
 function fmtDate(s){try{const d=new Date(s);return d.toLocaleDateString("tr-TR",{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return s;}}
 function countdown(s){const diff=new Date(s)-Date.now();if(diff<=0)return"Tamamlandı";const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000);if(h>48)return`${Math.floor(h/24)} gün`;if(h>0)return`${h}s ${m}dk`;return`${m} dk`;}
 function uid(){return"id_"+Math.random().toString(36).slice(2,9);}
 async function readFileAsDataURL(file){return new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(file);});}
-
-async function fsGet(col){if(!db)return[];const s=await db.collection(col).get();return s.docs.map(d=>({id:d.id,...d.data()}));}
 async function fsSet(col,id,data){if(!db)return;await db.collection(col).doc(id).set(data,{merge:true});}
 async function fsDel(col,id){if(!db)return;await db.collection(col).doc(id).delete();}
 async function fsAdd(col,data){if(!db)return{id:uid()};const r=await db.collection(col).add({...data,createdAt:firebase.firestore.FieldValue.serverTimestamp()});return{id:r.id};}
@@ -108,18 +102,14 @@ function Toggle({on,onChange,label}){return(<div style={{display:"flex",justifyC
 function Btn({label,onClick,bg=P,fg="#fff",full=true,disabled=false,loading=false}){return(<button onClick={onClick} disabled={disabled||loading} style={{width:full?"100%":"auto",background:bg,color:fg,border:"none",borderRadius:12,padding:"13px 16px",fontSize:14,fontWeight:700,cursor:disabled||loading?"not-allowed":"pointer",marginBottom:full?8:0,opacity:disabled?.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{loading&&<Spin/>}{label}</button>);}
 function SpBadge({sponsorId,sponsors}){const s=sponsors.find(x=>x.id===sponsorId);if(!s)return null;return <span style={{background:s.color,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{s.logo} Sponsor</span>;}
 
-// ── AUTH ──────────────────────────────────────────────
 function AuthScreen({onAuth}){
   const [tab,setTab]=useState("login");
   const [name,setName]=useState(""),[ email,setEmail]=useState(""),[ pass,setPass]=useState(""),[ err,setErr]=useState(""),[ loading,setLoading]=useState(false);
-
   const handleEmail=async()=>{
     setErr("");setLoading(true);
     try{
-      if(tab==="login"){
-        const c=await auth.signInWithEmailAndPassword(email,pass);
-        onAuth(c.user);
-      }else{
+      if(tab==="login"){const c=await auth.signInWithEmailAndPassword(email,pass);onAuth(c.user);}
+      else{
         if(!name.trim()){setErr("Ad Soyad gerekli");setLoading(false);return;}
         const c=await auth.createUserWithEmailAndPassword(email,pass);
         await c.user.updateProfile({displayName:name});
@@ -132,7 +122,6 @@ function AuthScreen({onAuth}){
     }
     setLoading(false);
   };
-
   const handleGoogle=async()=>{
     setErr("");setLoading(true);
     try{
@@ -140,14 +129,11 @@ function AuthScreen({onAuth}){
       const c=await auth.signInWithPopup(provider);
       const u=c.user;
       const doc=await db.collection("users").doc(u.uid).get();
-      if(!doc.exists){
-        await fsSet("users",u.uid,{name:u.displayName,email:u.email,photoURL:u.photoURL||"",role:"user",pace:"",strava:"",phone:"",notifEvents:true,notifReminder:true,notifSponsor:false,badges:["🏅 İlk Koşu"],createdAt:Date.now()});
-      }
+      if(!doc.exists){await fsSet("users",u.uid,{name:u.displayName,email:u.email,photoURL:u.photoURL||"",role:"user",pace:"",strava:"",phone:"",notifEvents:true,notifReminder:true,notifSponsor:false,badges:["🏅 İlk Koşu"],createdAt:Date.now()});}
       onAuth(u);
     }catch(e){setErr(e.message);}
     setLoading(false);
   };
-
   return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"24px 24px 48px"}}>
       <div style={{width:72,height:72,borderRadius:18,background:P,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:900,color:"#fff",marginBottom:12}}>RC</div>
@@ -176,7 +162,6 @@ function AuthScreen({onAuth}){
   );
 }
 
-// ── SPLASH ────────────────────────────────────────────
 function Splash({brand,onDone}){
   return(
     <div style={{position:"fixed",inset:0,zIndex:500,overflow:"hidden",width:"100%"}}>
@@ -216,13 +201,11 @@ function Splash({brand,onDone}){
   );
 }
 
-// ── SETTINGS ──────────────────────────────────────────
 function Settings({user,onBack,toast}){
   const [u,setU]=useState({name:user.displayName||user.name||"",email:user.email||"",pace:user.pace||"",strava:user.strava||"",phone:user.phone||"",notifEvents:user.notifEvents!==false,notifReminder:user.notifReminder!==false,notifSponsor:!!user.notifSponsor});
   const [op,setOp]=useState(""),[ np,setNp]=useState(""),[ np2,setNp2]=useState(""),[ pe,setPe]=useState("");
   const [sec,setSec]=useState("profile"),[ saving,setSaving]=useState(false);
   const isGoogle=auth.currentUser?.providerData?.[0]?.providerId==="google.com";
-
   const save=async()=>{setSaving(true);await fsSet("users",auth.currentUser.uid,{name:u.name,pace:u.pace,strava:u.strava,phone:u.phone,notifEvents:u.notifEvents,notifReminder:u.notifReminder,notifSponsor:u.notifSponsor});toast("✓ Profil kaydedildi");setSaving(false);};
   const chPw=async()=>{
     if(np.length<6){setPe("En az 6 karakter");return;}
@@ -234,7 +217,6 @@ function Settings({user,onBack,toast}){
       setOp("");setNp("");setNp2("");setPe("");toast("✓ Şifre güncellendi");
     }catch(e){setPe(e.code==="auth/wrong-password"?"Mevcut şifre hatalı":e.message);}
   };
-
   return(
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
@@ -258,7 +240,7 @@ function Settings({user,onBack,toast}){
       {sec==="security"&&(<div>
         <div style={{fontWeight:600,fontSize:15,color:TXT,marginBottom:12}}>Şifre Değiştir</div>
         {isGoogle
-          ?<div style={{padding:"12px 16px",background:BG2,borderRadius:12,fontSize:13,color:TXT2}}>Google hesabıyla giriş yaptınız. Şifre değiştirmek için Google hesabınızı kullanın.</div>
+          ?<div style={{padding:"12px 16px",background:BG2,borderRadius:12,fontSize:13,color:TXT2}}>Google hesabıyla giriş yaptınız.</div>
           :<div>
             <Field label="Mevcut Şifre" value={op} onChange={setOp} type="password"/>
             <Field label="Yeni Şifre" value={np} onChange={setNp} type="password"/>
@@ -283,7 +265,6 @@ function Settings({user,onBack,toast}){
   );
 }
 
-// ── PROFILE ───────────────────────────────────────────
 function Profile({user,userDoc,onSettings,onLogout}){
   const name=userDoc?.name||user.displayName||"Kullanıcı";
   const isAdmin=userDoc?.role==="admin";
@@ -319,7 +300,6 @@ function Profile({user,userDoc,onSettings,onLogout}){
   );
 }
 
-// ── EVENT CARD ────────────────────────────────────────
 function EventCard({event,joined,onRSVP,onClick,sponsors}){
   const sp=sponsors.find(s=>s.id===event.sponsorId);
   return(
@@ -467,14 +447,13 @@ function Announcements({announcements,sponsors}){
   );
 }
 
-// ── ADMIN ─────────────────────────────────────────────
+// ── ADMIN — SADECE BU FONKSİYON DEĞİŞTİ ─────────────
 function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSponsors,users,setUsers,brand,setBrand,onSettings,onLogout,toast}){
   const [tab,setTab]=useState("analytics");
   const TABS=[["analytics","📊"],["events","🏃"],["announce","📢"],["sponsors","💼"],["notif","🔔"],["brand","🎨"],["users","👥"]];
   const blankE={title:"",date:"",location:"",distance:"",sponsorId:""};
   const [eF,setEF]=useState(blankE);const [editE,setEditE]=useState(null);const [saving,setSaving]=useState(false);
   const spOpts=[["","Sponsor Yok"],...sponsors.filter(s=>s.active).map(s=>[s.id,s.name])];
-
   const saveE=async()=>{
     if(!eF.title||!eF.date||!eF.location||!eF.distance){toast("❌ Tüm alanları doldurun");return;}
     setSaving(true);
@@ -485,7 +464,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
   };
   const delE=async id=>{await fsDel("events",id);setEvents(events.filter(e=>e.id!==id));toast("🗑️ Silindi");};
   const startEditE=ev=>{setEditE(ev.id);setEF({title:ev.title,date:ev.date,location:ev.location,distance:String(ev.distance),sponsorId:ev.sponsorId||""});window.scrollTo(0,0);};
-
   const blankA={title:"",content:"",sponsorId:""};
   const [aF,setAF]=useState(blankA);
   const saveA=async()=>{
@@ -496,7 +474,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
     setAF(blankA);toast("✓ Duyuru yayınlandı");
   };
   const delA=async id=>{await fsDel("announcements",id);setAnnouncements(announcements.filter(a=>a.id!==id));toast("🗑️ Silindi");};
-
   const blankS={name:"",logo:"",color:"#FF6B00",msg:"",url:""};
   const [sF,setSF]=useState(blankS);
   const saveS=async()=>{
@@ -507,21 +484,23 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
   };
   const toggleS=async id=>{const s=sponsors.find(x=>x.id===id);await fsSet("sponsors",id,{active:!s.active});setSponsors(sponsors.map(x=>x.id===id?{...x,active:!x.active}:x));};
   const delS=async id=>{await fsDel("sponsors",id);setSponsors(sponsors.filter(s=>s.id!==id));toast("🗑️ Silindi");};
-
   const [nm,setNm]=useState("");
   const sendN=()=>{if(!nm.trim()){toast("❌ Mesaj yazın");return;}toast(`📱 Gönderildi (${users.length} kullanıcı)`);setNm("");};
-
   const logoRef=useRef();const bgRef=useRef();
   const readImg=async(file,key)=>{const d=await readFileAsDataURL(file);setBrand(p=>({...p,[key]:d}));};
 
   return(
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-  <div style={{fontWeight:800,fontSize:18,color:TXT}}>Admin Panel</div>
-  <div style={{display:"flex",gap:6}}>
-    <button onClick={onSettings} style={{background:BG2,border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:TXT}}>⚙️ Ayarlar</button>
-    <button onClick={onLogout} style={{background:"#FFEBEE",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#C62828"}}>🚪 Çıkış</button>
-  </div>
-</div>
+    <div>
+      {/* ── BAŞLIK + BUTONLAR ── */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontWeight:800,fontSize:18,color:TXT}}>Admin Panel</div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={onSettings} style={{background:BG2,border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:TXT}}>⚙️ Ayarlar</button>
+          <button onClick={onLogout} style={{background:"#FFEBEE",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#C62828"}}>🚪 Çıkış</button>
+        </div>
+      </div>
+
+      {/* ── SEKMELER ── */}
       <div style={{display:"flex",gap:4,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
         {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flexShrink:0,background:tab===k?P:BG2,color:tab===k?"#fff":TXT,border:"none",borderRadius:10,padding:"8px 12px",fontSize:16,cursor:"pointer",fontWeight:700}}>{l}</button>)}
       </div>
@@ -545,7 +524,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
-
       {tab==="events"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>{editE?"✏️ Düzenle":"➕ Yeni Etkinlik"}</div>
@@ -572,7 +550,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
-
       {tab==="announce"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Duyuru</div>
@@ -589,7 +566,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
-
       {tab==="sponsors"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Sponsor</div>
@@ -618,7 +594,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
-
       {tab==="notif"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>📱 Push Bildirim</div>
@@ -632,7 +607,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
-
       {tab==="brand"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>🎨 Karşılama Ekranı</div>
@@ -663,7 +637,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           <Btn label="✓ Kaydet" onClick={async()=>{await fsSet("config","brand",brand);toast("✓ Marka ayarları kaydedildi");}}/>
         </div>
       )}
-
       {tab==="users"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>Kullanıcılar ({users.length})</div>
@@ -692,7 +665,6 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
   );
 }
 
-// ── ROOT ──────────────────────────────────────────────
 function App(){
   const [phase,setPhase]=useState("loading");
   const [fireUser,setFireUser]=useState(null);
@@ -706,7 +678,6 @@ function App(){
   const [anns,setAnns]=useState(SEED_ANN);
   const [sponsors,setSponsors]=useState(SEED_SPONSORS);
   const [users,setUsers]=useState([]);
-
   const toast=msg=>setToastMsg(msg);
 
   useEffect(()=>{
@@ -739,7 +710,6 @@ function App(){
 
   const handleAuth=u=>{setFireUser(u);};
   const handleLogout=async()=>{await auth.signOut();setFireUser(null);setPhase("splash");};
-
   const handleRSVP=async id=>{
     if(!fireUser){toast("Önce giriş yapın");return;}
     const ev=events.find(e=>e.id===id);if(!ev)return;
@@ -753,7 +723,6 @@ function App(){
 
   const isAdmin=userDoc?.role==="admin";
   const rsvpd=fireUser?events.filter(e=>(e.participants||[]).includes(fireUser.uid)).map(e=>e.id):[];
-
   const TABS=[
     {id:"home",icon:"🏃",label:"Koşular"},
     {id:"calendar",icon:"📅",label:"Takvim"},
@@ -761,7 +730,6 @@ function App(){
     {id:"profile",icon:"👤",label:"Profil"},
     ...(isAdmin?[{id:"admin",icon:"⚙️",label:"Admin"}]:[]),
   ];
-
   const changeTab=t=>{setTab(t);setSub(null);setDetail(null);};
 
   if(phase==="loading") return(
@@ -823,9 +791,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 
 <script>
 if("serviceWorker" in navigator){
-  window.addEventListener("load",()=>{
-    navigator.serviceWorker.register("sw.js").catch(()=>{});
-  });
+  window.addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{});});
 }
 const isIOS=/iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
 const isStandalone=window.matchMedia("(display-mode:standalone)").matches;
