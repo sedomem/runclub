@@ -179,7 +179,7 @@ function AuthScreen({onAuth}){
 // ── SPLASH ────────────────────────────────────────────
 function Splash({brand,onDone}){
   return(
-    <div style={{position:"fixed",inset:0,zIndex:500,overflow:"hidden",maxWidth:430,left:"50%",transform:"translateX(-50%)"}}>
+    <div style={{position:"fixed",inset:0,zIndex:500,overflow:"hidden",width:"100%"}}>
       {brand.bgImg?<img src={brand.bgImg} alt="bg" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>
         :<div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#111 0%,#2d1200 55%,#FF6B00 100%)"}}>
           <svg viewBox="0 0 400 700" style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.15}}>
