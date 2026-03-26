@@ -34,23 +34,13 @@ button{font-family:inherit;cursor:pointer;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script>
-const firebaseConfig = {
-  apiKey:            "AIzaSyB7SILozFPijLe3a15ytKeXnnL17yj-FGI",
-  authDomain:        "runclub-bc63c.firebaseapp.com",
-  projectId:         "runclub-bc63c",
-  storageBucket:     "runclub-bc63c.firebasestorage.app",
-  messagingSenderId: "442524891653",
-  appId:             "1:442524891653:web:7bdc9e4863d8cd0595fa6c",
-  measurementId:     "G-1MQFR32ZX0"
-};
+const firebaseConfig={apiKey:"AIzaSyB7SILozFPijLe3a15ytKeXnnL17yj-FGI",authDomain:"runclub-bc63c.firebaseapp.com",projectId:"runclub-bc63c",storageBucket:"runclub-bc63c.firebasestorage.app",messagingSenderId:"442524891653",appId:"1:442524891653:web:7bdc9e4863d8cd0595fa6c",measurementId:"G-1MQFR32ZX0"};
 firebase.initializeApp(firebaseConfig);
-window._db   = firebase.firestore();
-window._auth = firebase.auth();
-window.DEMO  = false;
+window._db=firebase.firestore();
+window._auth=firebase.auth();
+window.DEMO=false;
 </script>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -73,6 +63,10 @@ const SEED_ANN=[
   {id:"a1",title:"🎉 Nisan Takvimi Açıklandı!",content:"Nisan ayı koşu programımız hazır. Toplam 8 etkinlik planlandı!",isSponsored:false,date:"2026-03-20"},
   {id:"a2",title:"SPX Koşu Ayakkabısı İndirimi",content:"Onetrail üyelerine özel %20 indirim!",isSponsored:true,sponsorId:"s1",date:"2026-03-18"},
 ];
+const SEED_CHALLENGES=[
+  {id:"c1",title:"Haftalık 50,000 Adım",target:50000,reward:"SPX %10 İndirim",sponsorId:"s1",active:true,startDate:"2026-03-24",endDate:"2026-03-30"},
+  {id:"c2",title:"Haftalık 70,000 Adım",target:70000,reward:"NikeRun %20 İndirim",sponsorId:"s2",active:true,startDate:"2026-03-24",endDate:"2026-03-30"},
+];
 
 const db=window._db;
 const auth=window._auth;
@@ -84,6 +78,9 @@ async function readFileAsDataURL(file){return new Promise(res=>{const r=new File
 async function fsSet(col,id,data){if(!db)return;await db.collection(col).doc(id).set(data,{merge:true});}
 async function fsDel(col,id){if(!db)return;await db.collection(col).doc(id).delete();}
 async function fsAdd(col,data){if(!db)return{id:uid()};const r=await db.collection(col).add({...data,createdAt:firebase.firestore.FieldValue.serverTimestamp()});return{id:r.id};}
+
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function weekStart(){const d=new Date();d.setDate(d.getDate()-d.getDay()+1);return d.toISOString().slice(0,10);}
 
 const I={width:"100%",background:"#fff",border:`1.5px solid ${BRD}`,borderRadius:10,padding:"10px 12px",fontSize:14,color:TXT,outline:"none"};
 const TA={...I,resize:"none"};
@@ -102,6 +99,164 @@ function Toggle({on,onChange,label}){return(<div style={{display:"flex",justifyC
 function Btn({label,onClick,bg=P,fg="#fff",full=true,disabled=false,loading=false}){return(<button onClick={onClick} disabled={disabled||loading} style={{width:full?"100%":"auto",background:bg,color:fg,border:"none",borderRadius:12,padding:"13px 16px",fontSize:14,fontWeight:700,cursor:disabled||loading?"not-allowed":"pointer",marginBottom:full?8:0,opacity:disabled?.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{loading&&<Spin/>}{label}</button>);}
 function SpBadge({sponsorId,sponsors}){const s=sponsors.find(x=>x.id===sponsorId);if(!s)return null;return <span style={{background:s.color,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{s.logo} Sponsor</span>;}
 
+// ── PROGRESS BAR ──────────────────────────────────────
+function ProgressBar({value,max,color=P,height=8}){
+  const pct=Math.min(100,Math.round((value/max)*100));
+  return(
+    <div style={{background:BG2,borderRadius:99,height,overflow:"hidden"}}>
+      <div style={{width:pct+"%",height:"100%",background:color,borderRadius:99,transition:"width .4s"}}/>
+    </div>
+  );
+}
+
+// ── STEP WIDGET (Home ekranı) ─────────────────────────
+function StepWidget({userId,userName,stepData,onLog,sponsors,challenges}){
+  const [showModal,setShowModal]=useState(false);
+  const [input,setInput]=useState("");
+  const [saving,setSaving]=useState(false);
+
+  const today=todayStr();
+  const todayEntry=stepData.filter(s=>s.userId===userId&&s.date===today).reduce((a,b)=>a+(b.steps||0),0);
+  const dailyGoal=10000;
+  const pct=Math.min(100,Math.round((todayEntry/dailyGoal)*100));
+
+  // Haftalık toplam
+  const ws=weekStart();
+  const weeklySteps=stepData.filter(s=>s.userId===userId&&s.date>=ws).reduce((a,b)=>a+(b.steps||0),0);
+
+  // Challenge kontrolü
+  const activeChallenge=challenges.find(c=>c.active);
+  const challengePct=activeChallenge?Math.min(100,Math.round((weeklySteps/activeChallenge.target)*100)):0;
+  const challengeSponsor=activeChallenge?sponsors.find(s=>s.id===activeChallenge.sponsorId):null;
+
+  const handleSave=async()=>{
+    const n=parseInt(input);
+    if(!n||n<0||n>100000){return;}
+    setSaving(true);
+    const ref=await fsAdd("stepData",{userId,userName,date:today,steps:n,source:"manual"});
+    onLog({id:ref.id,userId,userName,date:today,steps:n,source:"manual"});
+    setInput("");setShowModal(false);setSaving(false);
+  };
+
+  return(
+    <div>
+      {/* Günlük widget */}
+      <div style={{background:`linear-gradient(135deg,#1a1a2e,#16213e)`,borderRadius:18,padding:"18px 20px",marginBottom:12,color:"#fff"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,opacity:.7,fontWeight:700,letterSpacing:1,marginBottom:4}}>BUGÜNKÜ ADIMLARIM</div>
+            <div style={{fontSize:36,fontWeight:900,letterSpacing:-1}}>{todayEntry.toLocaleString("tr-TR")}</div>
+            <div style={{fontSize:12,opacity:.7}}>Hedef: {dailyGoal.toLocaleString("tr-TR")} adım</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:28,fontWeight:800,color:P}}>{pct}%</div>
+            <div style={{fontSize:11,opacity:.7}}>tamamlandı</div>
+          </div>
+        </div>
+        <ProgressBar value={todayEntry} max={dailyGoal} color={P} height={10}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
+          <div style={{fontSize:12,opacity:.7}}>Bu hafta: <b style={{color:P}}>{weeklySteps.toLocaleString("tr-TR")}</b> adım</div>
+          <button onClick={()=>setShowModal(true)} style={{background:P,color:"#fff",border:"none",borderRadius:20,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Adım Ekle</button>
+        </div>
+      </div>
+
+      {/* Challenge widget */}
+      {activeChallenge&&(
+        <div style={{background:challengeSponsor?challengeSponsor.color+"15":BG2,border:`1.5px solid ${challengeSponsor?challengeSponsor.color+"44":BRD}`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+            <div>
+              <div style={{fontSize:11,color:P,fontWeight:700,marginBottom:2}}>🏆 HAFTALIK CHALLENGE</div>
+              <div style={{fontWeight:700,fontSize:14,color:TXT}}>{activeChallenge.title}</div>
+            </div>
+            {challengeSponsor&&<span style={{background:challengeSponsor.color,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{challengeSponsor.logo}</span>}
+          </div>
+          <ProgressBar value={weeklySteps} max={activeChallenge.target} color={challengeSponsor?challengeSponsor.color:P} height={8}/>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+            <div style={{fontSize:11,color:TXT2}}>{weeklySteps.toLocaleString("tr-TR")} / {activeChallenge.target.toLocaleString("tr-TR")}</div>
+            <div style={{fontSize:11,color:TXT2,fontWeight:600}}>%{challengePct}</div>
+          </div>
+          {challengePct>=100&&(
+            <div style={{background:"#E8F5E9",borderRadius:10,padding:"8px 12px",marginTop:8,fontSize:12,color:"#2E7D32",fontWeight:600}}>
+              🎉 Tebrikler! Ödülünüz: {activeChallenge.reward}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Adım ekleme modal */}
+      {showModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div style={{background:BG,borderRadius:"18px 18px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:430}}>
+            <div style={{fontWeight:700,fontSize:16,color:TXT,marginBottom:16}}>Bugünkü Adımını Gir</div>
+            <Field label="Adım Sayısı" value={input} onChange={setInput} type="number" placeholder="örn: 8500"/>
+            <div style={{fontSize:12,color:TXT2,marginBottom:16}}>📱 Telefonunuzun sağlık uygulamasından (Samsung Health, Apple Health vb.) bakabilirsiniz.</div>
+            <Btn label="Kaydet" onClick={handleSave} loading={saving}/>
+            <Btn label="İptal" onClick={()=>setShowModal(false)} bg={BG2} fg={TXT}/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── LEADERBOARD SCREEN ────────────────────────────────
+function LeaderboardScreen({stepData,users,challenges,sponsors}){
+  const [view,setView]=useState("weekly");
+  const ws=weekStart();
+  const today=todayStr();
+
+  const calcSteps=(uid,filter)=>{
+    return stepData.filter(s=>s.userId===uid&&(filter==="weekly"?s.date>=ws:s.date===today)).reduce((a,b)=>a+(b.steps||0),0);
+  };
+
+  const board=users.map(u=>({...u,steps:calcSteps(u.id,view)})).sort((a,b)=>b.steps-a.steps).filter(u=>u.steps>0);
+  const medals=["🥇","🥈","🥉"];
+  const activeChallenge=challenges.find(c=>c.active);
+  const challengeSponsor=activeChallenge?sponsors.find(s=>s.id===activeChallenge.sponsorId):null;
+
+  return(
+    <div>
+      <div style={{fontWeight:700,fontSize:18,color:TXT,marginBottom:14}}>🏆 Adım Sıralaması</div>
+
+      {/* Sekme */}
+      <div style={{display:"flex",gap:4,marginBottom:16,background:BG2,borderRadius:12,padding:4}}>
+        {[["weekly","Bu Hafta"],["daily","Bugün"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setView(k)} style={{flex:1,background:view===k?P:"transparent",color:view===k?"#fff":TXT2,border:"none",borderRadius:9,padding:"8px 0",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+
+      {/* Challenge banner */}
+      {activeChallenge&&view==="weekly"&&(
+        <div style={{background:challengeSponsor?challengeSponsor.color+"15":BG2,border:`1px solid ${challengeSponsor?challengeSponsor.color+"44":BRD}`,borderRadius:14,padding:"12px 16px",marginBottom:16}}>
+          <div style={{fontSize:12,color:TXT2,marginBottom:4}}>Aktif Challenge</div>
+          <div style={{fontWeight:700,fontSize:14,color:TXT}}>{activeChallenge.title}</div>
+          <div style={{fontSize:12,color:TXT2,marginTop:4}}>🎁 Ödül: <b>{activeChallenge.reward}</b></div>
+          {challengeSponsor&&<div style={{fontSize:11,color:TXT2,marginTop:2}}>Sponsor: {challengeSponsor.name}</div>}
+        </div>
+      )}
+
+      {/* Sıralama */}
+      {board.length===0&&<div style={{textAlign:"center",color:TXT2,padding:"40px 0",fontSize:14}}>Henüz adım verisi yok. İlk sen ol! 🏃</div>}
+      {board.map((u,i)=>(
+        <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:i===0?"#FFF9F5":BG2,borderRadius:14,marginBottom:8,border:i===0?`1.5px solid ${P}44`:"none"}}>
+          <div style={{fontSize:22,width:32,textAlign:"center",flexShrink:0}}>{medals[i]||<span style={{fontSize:14,fontWeight:700,color:TXT2}}>#{i+1}</span>}</div>
+          {!medals[i]&&<span style={{fontSize:14,fontWeight:700,color:TXT2,width:32,textAlign:"center",flexShrink:0}}>#{i+1}</span>}
+          <Ava name={u.name||"?"} size={36}/>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:14,color:TXT}}>{u.name||"Koşucu"}</div>
+            <ProgressBar value={u.steps} max={Math.max(board[0]?.steps||1,1)} color={i===0?P:"#CCC"} height={4}/>
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontWeight:800,fontSize:16,color:i===0?P:TXT}}>{u.steps.toLocaleString("tr-TR")}</div>
+            <div style={{fontSize:10,color:TXT2}}>adım</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── AUTH ──────────────────────────────────────────────
 function AuthScreen({onAuth}){
   const [tab,setTab]=useState("login");
   const [name,setName]=useState(""),[ email,setEmail]=useState(""),[ pass,setPass]=useState(""),[ err,setErr]=useState(""),[ loading,setLoading]=useState(false);
@@ -117,7 +272,7 @@ function AuthScreen({onAuth}){
         onAuth(c.user);
       }
     }catch(e){
-      const m={"auth/user-not-found":"Kullanıcı bulunamadı","auth/wrong-password":"Şifre hatalı","auth/invalid-login-credentials":"E-posta veya şifre hatalı","auth/email-already-in-use":"Bu e-posta zaten kayıtlı","auth/weak-password":"Şifre çok zayıf (min 6 karakter)","auth/invalid-email":"Geçersiz e-posta formatı"};
+      const m={"auth/user-not-found":"Kullanıcı bulunamadı","auth/wrong-password":"Şifre hatalı","auth/invalid-login-credentials":"E-posta veya şifre hatalı","auth/email-already-in-use":"Bu e-posta zaten kayıtlı","auth/weak-password":"Şifre çok zayıf","auth/invalid-email":"Geçersiz e-posta"};
       setErr(m[e.code]||e.message);
     }
     setLoading(false);
@@ -179,8 +334,7 @@ function Splash({brand,onDone}){
               <path d="M112 268 Q148 278 162 262" strokeWidth="10"/>
             </g>
           </svg>
-        </div>
-      }
+        </div>}
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.55)"}}/>
       <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%",padding:"0 24px 52px",textAlign:"center"}}>
         {brand.logoImg?<img src={brand.logoImg} alt="logo" style={{width:80,height:80,borderRadius:20,objectFit:"cover",marginBottom:14}}/>
@@ -239,20 +393,17 @@ function Settings({user,onBack,toast}){
       </div>)}
       {sec==="security"&&(<div>
         <div style={{fontWeight:600,fontSize:15,color:TXT,marginBottom:12}}>Şifre Değiştir</div>
-        {isGoogle
-          ?<div style={{padding:"12px 16px",background:BG2,borderRadius:12,fontSize:13,color:TXT2}}>Google hesabıyla giriş yaptınız.</div>
+        {isGoogle?<div style={{padding:"12px 16px",background:BG2,borderRadius:12,fontSize:13,color:TXT2}}>Google hesabıyla giriş yaptınız.</div>
           :<div>
             <Field label="Mevcut Şifre" value={op} onChange={setOp} type="password"/>
             <Field label="Yeni Şifre" value={np} onChange={setNp} type="password"/>
             <Field label="Yeni Şifre (Tekrar)" value={np2} onChange={setNp2} type="password"/>
             {pe&&<div style={{color:"#C62828",fontSize:12,marginBottom:8,fontWeight:600,padding:"8px 12px",background:"#FFEBEE",borderRadius:8}}>{pe}</div>}
             <Btn label="Şifreyi Güncelle" onClick={chPw}/>
-          </div>
-        }
+          </div>}
         <div style={{marginTop:20,padding:"12px 16px",background:BG2,borderRadius:12}}>
           <div style={{fontSize:13,color:TXT,marginBottom:4,fontWeight:600}}>Hesap Bilgileri</div>
           <div style={{fontSize:12,color:TXT2}}>E-posta: {user.email}</div>
-          <div style={{fontSize:12,color:TXT2}}>UID: {auth.currentUser?.uid?.slice(0,20)}...</div>
         </div>
       </div>)}
       {sec==="notif"&&(<div>
@@ -332,19 +483,24 @@ function EventCard({event,joined,onRSVP,onClick,sponsors}){
   );
 }
 
-function Home({events,rsvpd,onRSVP,onDetail,sponsors}){
-  const next=events.find(e=>new Date(e.date)>Date.now());
+function Home({events,rsvpd,onRSVP,onDetail,sponsors,userId,userName,stepData,onLogStep,challenges}){
   return(
     <div>
-      {next&&(
+      {/* Adım Widget */}
+      <StepWidget userId={userId} userName={userName} stepData={stepData} onLog={onLogStep} sponsors={sponsors} challenges={challenges}/>
+
+      {/* Etkinlikler */}
+      {events.find(e=>new Date(e.date)>Date.now())&&(
         <div style={{background:`linear-gradient(135deg,${P},#FF9A3C)`,borderRadius:18,padding:"18px 20px",marginBottom:18,color:"#fff"}}>
-          <div style={{fontSize:11,opacity:.85,marginBottom:4,fontWeight:700,letterSpacing:1}}>SONRAKI KOŞU</div>
-          <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>{next.title}</div>
-          <div style={{fontSize:13,opacity:.9,marginBottom:12}}>📍 {next.location}</div>
-          <div style={{display:"flex",justifyContent:"space-between"}}>
-            <div><div style={{fontSize:26,fontWeight:900}}>{countdown(next.date)}</div><div style={{fontSize:11,opacity:.8}}>kalan süre</div></div>
-            <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:800}}>{next.distance} km</div><div style={{fontSize:11,opacity:.8}}>{(next.participants||[]).length} kişi</div></div>
-          </div>
+          {(()=>{const next=events.find(e=>new Date(e.date)>Date.now());return(<>
+            <div style={{fontSize:11,opacity:.85,marginBottom:4,fontWeight:700,letterSpacing:1}}>SONRAKI KOŞU</div>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>{next.title}</div>
+            <div style={{fontSize:13,opacity:.9,marginBottom:12}}>📍 {next.location}</div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <div><div style={{fontSize:26,fontWeight:900}}>{countdown(next.date)}</div><div style={{fontSize:11,opacity:.8}}>kalan süre</div></div>
+              <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:800}}>{next.distance} km</div><div style={{fontSize:11,opacity:.8}}>{(next.participants||[]).length} kişi</div></div>
+            </div>
+          </>);})()}
         </div>
       )}
       <div style={{fontWeight:700,fontSize:16,color:TXT,marginBottom:12}}>Yaklaşan Koşular</div>
@@ -447,13 +603,18 @@ function Announcements({announcements,sponsors}){
   );
 }
 
-// ── ADMIN — SADECE BU FONKSİYON DEĞİŞTİ ─────────────
-function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSponsors,users,setUsers,brand,setBrand,onSettings,onLogout,toast}){
+// ── ADMIN ─────────────────────────────────────────────
+function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSponsors,users,setUsers,brand,setBrand,stepData,challenges,setChallenges,onSettings,onLogout,toast}){
   const [tab,setTab]=useState("analytics");
-  const TABS=[["analytics","📊"],["events","🏃"],["announce","📢"],["sponsors","💼"],["notif","🔔"],["brand","🎨"],["users","👥"]];
+  const TABS=[["analytics","📊"],["steps","👟"],["events","🏃"],["announce","📢"],["sponsors","💼"],["notif","🔔"],["brand","🎨"],["users","👥"]];
   const blankE={title:"",date:"",location:"",distance:"",sponsorId:""};
   const [eF,setEF]=useState(blankE);const [editE,setEditE]=useState(null);const [saving,setSaving]=useState(false);
   const spOpts=[["","Sponsor Yok"],...sponsors.filter(s=>s.active).map(s=>[s.id,s.name])];
+
+  // Challenge form
+  const blankC={title:"",target:"",reward:"",sponsorId:"",startDate:"",endDate:""};
+  const [cF,setCF]=useState(blankC);
+
   const saveE=async()=>{
     if(!eF.title||!eF.date||!eF.location||!eF.distance){toast("❌ Tüm alanları doldurun");return;}
     setSaving(true);
@@ -464,6 +625,7 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
   };
   const delE=async id=>{await fsDel("events",id);setEvents(events.filter(e=>e.id!==id));toast("🗑️ Silindi");};
   const startEditE=ev=>{setEditE(ev.id);setEF({title:ev.title,date:ev.date,location:ev.location,distance:String(ev.distance),sponsorId:ev.sponsorId||""});window.scrollTo(0,0);};
+
   const blankA={title:"",content:"",sponsorId:""};
   const [aF,setAF]=useState(blankA);
   const saveA=async()=>{
@@ -474,6 +636,7 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
     setAF(blankA);toast("✓ Duyuru yayınlandı");
   };
   const delA=async id=>{await fsDel("announcements",id);setAnnouncements(announcements.filter(a=>a.id!==id));toast("🗑️ Silindi");};
+
   const blankS={name:"",logo:"",color:"#FF6B00",msg:"",url:""};
   const [sF,setSF]=useState(blankS);
   const saveS=async()=>{
@@ -484,14 +647,38 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
   };
   const toggleS=async id=>{const s=sponsors.find(x=>x.id===id);await fsSet("sponsors",id,{active:!s.active});setSponsors(sponsors.map(x=>x.id===id?{...x,active:!x.active}:x));};
   const delS=async id=>{await fsDel("sponsors",id);setSponsors(sponsors.filter(s=>s.id!==id));toast("🗑️ Silindi");};
+
   const [nm,setNm]=useState("");
   const sendN=()=>{if(!nm.trim()){toast("❌ Mesaj yazın");return;}toast(`📱 Gönderildi (${users.length} kullanıcı)`);setNm("");};
+
   const logoRef=useRef();const bgRef=useRef();
   const readImg=async(file,key)=>{const d=await readFileAsDataURL(file);setBrand(p=>({...p,[key]:d}));};
 
+  // Adım istatistikleri
+  const ws=weekStart();
+  const totalSteps=stepData.filter(s=>s.date>=ws).reduce((a,b)=>a+(b.steps||0),0);
+  const topUsers=users.map(u=>({...u,steps:stepData.filter(s=>s.userId===u.id&&s.date>=ws).reduce((a,b)=>a+(b.steps||0),0)})).sort((a,b)=>b.steps-a.steps).slice(0,3);
+  const completedChallenges=challenges.filter(c=>{
+    const userSteps=stepData.filter(s=>s.date>=ws).reduce((a,b)=>a+(b.steps||0),0);
+    return userSteps>=c.target;
+  }).length;
+
+  const saveChallenge=async()=>{
+    if(!cF.title||!cF.target||!cF.reward){toast("❌ Başlık, hedef ve ödül gerekli");return;}
+    const data={...cF,target:Number(cF.target),active:true};
+    const r=await fsAdd("challenges",data);
+    setChallenges([...challenges,{id:r.id,...data}]);
+    setCF(blankC);toast("✓ Challenge oluşturuldu");
+  };
+  const toggleChallenge=async id=>{
+    const c=challenges.find(x=>x.id===id);
+    await fsSet("challenges",id,{active:!c.active});
+    setChallenges(challenges.map(x=>x.id===id?{...x,active:!x.active}:x));
+  };
+  const delChallenge=async id=>{await fsDel("challenges",id);setChallenges(challenges.filter(c=>c.id!==id));toast("🗑️ Silindi");};
+
   return(
     <div>
-      {/* ── BAŞLIK + BUTONLAR ── */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:800,fontSize:18,color:TXT}}>Admin Panel</div>
         <div style={{display:"flex",gap:6}}>
@@ -499,12 +686,11 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           <button onClick={onLogout} style={{background:"#FFEBEE",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#C62828"}}>🚪 Çıkış</button>
         </div>
       </div>
-
-      {/* ── SEKMELER ── */}
       <div style={{display:"flex",gap:4,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
-        {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flexShrink:0,background:tab===k?P:BG2,color:tab===k?"#fff":TXT,border:"none",borderRadius:10,padding:"8px 12px",fontSize:16,cursor:"pointer",fontWeight:700}}>{l}</button>)}
+        {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flexShrink:0,background:tab===k?P:BG2,color:tab===k?"#fff":TXT,border:"none",borderRadius:10,padding:"8px 12px",fontSize:15,cursor:"pointer",fontWeight:700}}>{l}</button>)}
       </div>
 
+      {/* ANALİTİK */}
       {tab==="analytics"&&(
         <div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
@@ -514,16 +700,79 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
               </div>
             ))}
           </div>
-          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:8}}>Kayıtlı Kullanıcılar</div>
-          {users.slice(0,5).map((u,i)=>(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+            <div style={{background:"#1a1a2e",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
+              <div style={{fontSize:22}}>👟</div>
+              <div style={{fontWeight:800,fontSize:18,color:P}}>{totalSteps.toLocaleString("tr-TR")}</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Bu hafta toplam</div>
+            </div>
+            <div style={{background:"#1a1a2e",borderRadius:14,padding:"16px 12px",textAlign:"center"}}>
+              <div style={{fontSize:22}}>🏆</div>
+              <div style={{fontWeight:800,fontSize:18,color:"#FFD700"}}>{completedChallenges}</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Tamamlanan challenge</div>
+            </div>
+          </div>
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:8}}>En Aktif Koşucular (Bu Hafta)</div>
+          {topUsers.filter(u=>u.steps>0).map((u,i)=>(
             <div key={u.id||i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:BG2,borderRadius:12,marginBottom:8}}>
+              <span style={{fontSize:18}}>{["🥇","🥈","🥉"][i]}</span>
               <Ava name={u.name||"?"} size={32}/>
-              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:TXT}}>{u.name}</div><div style={{fontSize:11,color:TXT2}}>{u.email}</div></div>
-              <span style={{background:u.role==="admin"?P:"#888",color:"#fff",fontSize:9,padding:"2px 7px",borderRadius:20}}>{u.role==="admin"?"Admin":"Üye"}</span>
+              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:TXT}}>{u.name}</div></div>
+              <div style={{fontWeight:700,fontSize:13,color:P}}>{u.steps.toLocaleString("tr-TR")} adım</div>
             </div>
           ))}
         </div>
       )}
+
+      {/* ADIM & CHALLENGE YÖNETİMİ */}
+      {tab==="steps"&&(
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Challenge Oluştur</div>
+          <Field label="Challenge Başlığı" value={cF.title} onChange={v=>setCF(p=>({...p,title:v}))} placeholder="Haftalık 50,000 Adım"/>
+          <Field label="Hedef Adım Sayısı" value={cF.target} onChange={v=>setCF(p=>({...p,target:v}))} type="number" placeholder="50000"/>
+          <Field label="Ödül Açıklaması" value={cF.reward} onChange={v=>setCF(p=>({...p,reward:v}))} placeholder="SPX %10 İndirim Kodu"/>
+          <Select label="Sponsor (opsiyonel)" value={cF.sponsorId} onChange={v=>setCF(p=>({...p,sponsorId:v}))} options={spOpts}/>
+          <Field label="Başlangıç Tarihi" value={cF.startDate} onChange={v=>setCF(p=>({...p,startDate:v}))} type="date"/>
+          <Field label="Bitiş Tarihi" value={cF.endDate} onChange={v=>setCF(p=>({...p,endDate:v}))} type="date"/>
+          <div style={{marginBottom:20}}><Btn label="Challenge Oluştur" onClick={saveChallenge}/></div>
+
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Aktif Challengelar ({challenges.length})</div>
+          {challenges.length===0&&<div style={{color:TXT2,fontSize:13,textAlign:"center",padding:"20px 0"}}>Henüz challenge yok</div>}
+          {challenges.map(c=>{
+            const sp=sponsors.find(x=>x.id===c.sponsorId);
+            return(
+              <div key={c.id} style={{background:BG2,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,color:TXT}}>{c.title}</div>
+                    <div style={{fontSize:11,color:TXT2}}>Hedef: {Number(c.target).toLocaleString("tr-TR")} adım</div>
+                    <div style={{fontSize:11,color:TXT2}}>🎁 {c.reward}</div>
+                    {sp&&<div style={{marginTop:4}}><SpBadge sponsorId={c.sponsorId} sponsors={sponsors}/></div>}
+                  </div>
+                  <div style={{display:"flex",gap:4,marginLeft:8}}>
+                    <button onClick={()=>toggleChallenge(c.id)} style={{background:c.active?"#E8F5E9":"#FFEBEE",color:c.active?"#2E7D32":"#C62828",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>{c.active?"✓ Aktif":"✗ Pasif"}</button>
+                    <button onClick={()=>delChallenge(c.id)} style={{background:"#FFEBEE",color:"#C62828",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>🗑️</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <div style={{fontWeight:700,fontSize:14,color:TXT,marginTop:20,marginBottom:10}}>Bu Hafta Adım Verileri</div>
+          <div style={{background:"#1a1a2e",borderRadius:14,padding:"14px 16px",marginBottom:10}}>
+            <div style={{fontWeight:700,fontSize:24,color:P}}>{totalSteps.toLocaleString("tr-TR")}</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Topluluk toplam adımı (bu hafta)</div>
+          </div>
+          {topUsers.filter(u=>u.steps>0).map((u,i)=>(
+            <div key={u.id||i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:BG2,borderRadius:12,marginBottom:8}}>
+              <span style={{fontSize:18}}>{["🥇","🥈","🥉"][i]||`#${i+1}`}</span>
+              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:TXT}}>{u.name}</div></div>
+              <div style={{fontWeight:700,fontSize:13,color:P}}>{u.steps.toLocaleString("tr-TR")}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {tab==="events"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>{editE?"✏️ Düzenle":"➕ Yeni Etkinlik"}</div>
@@ -550,12 +799,13 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
+
       {tab==="announce"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Duyuru</div>
           <Field label="Başlık" value={aF.title} onChange={v=>setAF(p=>({...p,title:v}))}/>
           <Textarea label="İçerik" value={aF.content} onChange={v=>setAF(p=>({...p,content:v}))}/>
-          <Select label="Sponsor (opsiyonel)" value={aF.sponsorId} onChange={v=>setAF(p=>({...p,sponsorId:v}))} options={spOpts}/>
+          <Select label="Sponsor" value={aF.sponsorId} onChange={v=>setAF(p=>({...p,sponsorId:v}))} options={spOpts}/>
           <div style={{marginBottom:20}}><Btn label="Duyuruyu Yayınla" onClick={saveA}/></div>
           <div style={{fontWeight:700,fontSize:14,color:TXT,marginBottom:10}}>Duyurular ({announcements.length})</div>
           {announcements.map(a=>(
@@ -566,11 +816,12 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
+
       {tab==="sponsors"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>➕ Yeni Sponsor</div>
           <Field label="Sponsor Adı" value={sF.name} onChange={v=>setSF(p=>({...p,name:v}))}/>
-          <Field label="Kısa Kod (2-3 harf)" value={sF.logo} onChange={v=>setSF(p=>({...p,logo:v.slice(0,3).toUpperCase()}))}/>
+          <Field label="Kısa Kod" value={sF.logo} onChange={v=>setSF(p=>({...p,logo:v.slice(0,3).toUpperCase()}))}/>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:12,color:TXT,marginBottom:4,fontWeight:600}}>Marka Rengi</div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -594,6 +845,7 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
+
       {tab==="notif"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>📱 Push Bildirim</div>
@@ -607,6 +859,7 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           ))}
         </div>
       )}
+
       {tab==="brand"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>🎨 Karşılama Ekranı</div>
@@ -637,6 +890,7 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
           <Btn label="✓ Kaydet" onClick={async()=>{await fsSet("config","brand",brand);toast("✓ Marka ayarları kaydedildi");}}/>
         </div>
       )}
+
       {tab==="users"&&(
         <div>
           <div style={{fontWeight:700,fontSize:15,color:TXT,marginBottom:12}}>Kullanıcılar ({users.length})</div>
@@ -665,6 +919,7 @@ function Admin({events,setEvents,announcements,setAnnouncements,sponsors,setSpon
   );
 }
 
+// ── ROOT ──────────────────────────────────────────────
 function App(){
   const [phase,setPhase]=useState("loading");
   const [fireUser,setFireUser]=useState(null);
@@ -678,6 +933,9 @@ function App(){
   const [anns,setAnns]=useState(SEED_ANN);
   const [sponsors,setSponsors]=useState(SEED_SPONSORS);
   const [users,setUsers]=useState([]);
+  const [stepData,setStepData]=useState([]);
+  const [challenges,setChallenges]=useState(SEED_CHALLENGES);
+
   const toast=msg=>setToastMsg(msg);
 
   useEffect(()=>{
@@ -685,18 +943,22 @@ function App(){
       if(u){
         setFireUser(u);
         try{
-          const [evSnap,annSnap,spSnap,usSnap,brandSnap]=await Promise.all([
+          const [evSnap,annSnap,spSnap,usSnap,brandSnap,stSnap,chSnap]=await Promise.all([
             db.collection("events").get(),
             db.collection("announcements").get(),
             db.collection("sponsors").get(),
             db.collection("users").get(),
             db.collection("config").doc("brand").get(),
+            db.collection("stepData").get(),
+            db.collection("challenges").get(),
           ]);
           if(evSnap.docs.length>0) setEvents(evSnap.docs.map(d=>({id:d.id,...d.data()})));
           if(annSnap.docs.length>0) setAnns(annSnap.docs.map(d=>({id:d.id,...d.data()})));
           if(spSnap.docs.length>0) setSponsors(spSnap.docs.map(d=>({id:d.id,...d.data()})));
           if(usSnap.docs.length>0) setUsers(usSnap.docs.map(d=>({id:d.id,...d.data()})));
           if(brandSnap.exists) setBrand(brandSnap.data());
+          if(stSnap.docs.length>0) setStepData(stSnap.docs.map(d=>({id:d.id,...d.data()})));
+          if(chSnap.docs.length>0) setChallenges(chSnap.docs.map(d=>({id:d.id,...d.data()})));
           const myDoc=usSnap.docs.find(d=>d.id===u.uid);
           setUserDoc(myDoc?myDoc.data():null);
         }catch(e){console.error(e);}
@@ -710,6 +972,7 @@ function App(){
 
   const handleAuth=u=>{setFireUser(u);};
   const handleLogout=async()=>{await auth.signOut();setFireUser(null);setPhase("splash");};
+
   const handleRSVP=async id=>{
     if(!fireUser){toast("Önce giriş yapın");return;}
     const ev=events.find(e=>e.id===id);if(!ev)return;
@@ -721,15 +984,23 @@ function App(){
     toast(joined?"Katılım iptal edildi":"✓ Koşuya katıldın!");
   };
 
+  const handleLogStep=entry=>{
+    setStepData(prev=>[...prev,entry]);
+  };
+
   const isAdmin=userDoc?.role==="admin";
   const rsvpd=fireUser?events.filter(e=>(e.participants||[]).includes(fireUser.uid)).map(e=>e.id):[];
+  const userName=userDoc?.name||fireUser?.displayName||"Koşucu";
+
   const TABS=[
     {id:"home",icon:"🏃",label:"Koşular"},
+    {id:"leaderboard",icon:"🏆",label:"Sıralama"},
     {id:"calendar",icon:"📅",label:"Takvim"},
     {id:"announcements",icon:"📢",label:"Duyurular"},
     {id:"profile",icon:"👤",label:"Profil"},
     ...(isAdmin?[{id:"admin",icon:"⚙️",label:"Admin"}]:[]),
   ];
+
   const changeTab=t=>{setTab(t);setSub(null);setDetail(null);};
 
   if(phase==="loading") return(
@@ -746,16 +1017,17 @@ function App(){
     switch(tab){
       case"home": return detail
         ?<EventDetail event={events.find(e=>e.id===detail.id)||detail} onClose={()=>setDetail(null)} joined={rsvpd.includes(detail.id)} onRSVP={handleRSVP} sponsors={sponsors}/>
-        :<Home events={events} rsvpd={rsvpd} onRSVP={handleRSVP} onDetail={setDetail} sponsors={sponsors}/>;
+        :<Home events={events} rsvpd={rsvpd} onRSVP={handleRSVP} onDetail={setDetail} sponsors={sponsors} userId={fireUser?.uid} userName={userName} stepData={stepData} onLogStep={handleLogStep} challenges={challenges}/>;
+      case"leaderboard": return <LeaderboardScreen stepData={stepData} users={users} challenges={challenges} sponsors={sponsors}/>;
       case"calendar": return <CalendarScreen events={events} sponsors={sponsors}/>;
       case"announcements": return <Announcements announcements={anns} sponsors={sponsors}/>;
       case"profile": return <Profile user={fireUser||{}} userDoc={userDoc} onSettings={()=>setSub("settings")} onLogout={handleLogout}/>;
-      case"admin": return <Admin events={events} setEvents={setEvents} announcements={anns} setAnnouncements={setAnns} sponsors={sponsors} setSponsors={setSponsors} users={users} setUsers={setUsers} brand={brand} setBrand={setBrand} onSettings={()=>setSub("settings")} onLogout={handleLogout} toast={toast}/>;
+      case"admin": return <Admin events={events} setEvents={setEvents} announcements={anns} setAnnouncements={setAnns} sponsors={sponsors} setSponsors={setSponsors} users={users} setUsers={setUsers} brand={brand} setBrand={setBrand} stepData={stepData} challenges={challenges} setChallenges={setChallenges} onSettings={()=>setSub("settings")} onLogout={handleLogout} toast={toast}/>;
       default: return null;
     }
   };
 
-  const name=(userDoc?.name||fireUser?.displayName||"Kullanıcı").split(" ")[0];
+  const name=userName.split(" ")[0];
   return(
     <div style={{width:"100%",minHeight:"100vh",background:BG,position:"relative"}}>
       <div style={{padding:"13px 16px 8px",borderBottom:`1px solid ${BRD}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:BG,position:"sticky",top:0,zIndex:50}}>
@@ -775,7 +1047,7 @@ function App(){
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:BG,borderTop:`1px solid ${BRD}`,display:"flex",zIndex:100,boxShadow:"0 -2px 12px rgba(0,0,0,.08)"}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>changeTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 0 10px",background:"none",border:"none",cursor:"pointer"}}>
-            <span style={{fontSize:20}}>{t.icon}</span>
+            <span style={{fontSize:18}}>{t.icon}</span>
             <span style={{fontSize:9,fontWeight:700,color:tab===t.id?P:TXT2,marginTop:2}}>{t.label}</span>
             {tab===t.id&&<div style={{width:4,height:4,borderRadius:"50%",background:P,marginTop:2}}/>}
           </button>
